@@ -1,0 +1,184 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MealType {
+  batch_prep
+  cook_fresh
+}
+
+enum MealSource {
+  hello_fresh
+  manual
+}
+
+enum PantryLocation {
+  fridge
+  freezer
+  pantry
+}
+
+enum PlanStatus {
+  draft
+  active
+  completed
+}
+
+enum PlannedMealStatus {
+  planned
+  cooked
+  skipped
+  swapped
+}
+
+enum DayOfWeek {
+  monday
+  tuesday
+  wednesday
+  thursday
+  friday
+  saturday
+  sunday
+}
+
+enum MealSlot {
+  breakfast
+  lunch
+  dinner
+}
+
+enum IngredientCategory {
+  produce
+  protein
+  dairy
+  pantry_staple
+  grain
+  spice
+  condiment
+  frozen
+  other
+}
+
+model Meal {
+  id          Int       @id @default(autoincrement())
+  name        String
+  description String?
+  source      MealSource @default(manual)
+  sourceUrl   String?    @map("source_url")
+  mealType    MealType   @map("meal_type")
+  servings    Int        @default(2)
+  prepTime    Int?       @map("prep_time")
+  cookTime    Int?       @map("cook_time")
+  tags        String[]   @default([])
+  instructions Json      @default("[]")
+  imageUrl    String?    @map("image_url")
+
+  // Nutrition (per original serving)
+  calories    Int?
+  proteinG    Float?     @map("protein_g")
+  carbsG      Float?     @map("carbs_g")
+  fatG        Float?     @map("fat_g")
+  fiberG      Float?     @map("fiber_g")
+  sodiumMg    Float?     @map("sodium_mg")
+
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  ingredients  MealIngredient[]
+  plannedMeals PlannedMeal[]
+
+  @@map("meals")
+}
+
+model Ingredient {
+  id          Int                @id @default(autoincrement())
+  name        String             @unique
+  category    IngredientCategory @default(other)
+  defaultUnit String             @default("count") @map("default_unit")
+
+  mealIngredients MealIngredient[]
+  pantryItems     PantryItem[]
+  shoppingItems   ShoppingItem[]
+
+  @@map("ingredients")
+}
+
+model MealIngredient {
+  id           Int     @id @default(autoincrement())
+  mealId       Int     @map("meal_id")
+  ingredientId Int     @map("ingredient_id")
+  quantity     Float
+  unit         String
+  preparation  String?
+
+  meal       Meal       @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id])
+
+  @@unique([mealId, ingredientId])
+  @@map("meal_ingredients")
+}
+
+model PantryItem {
+  id             Int            @id @default(autoincrement())
+  ingredientId   Int            @map("ingredient_id")
+  quantity       Float
+  unit           String
+  location       PantryLocation @default(pantry)
+  expirationDate DateTime?      @map("expiration_date")
+
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id])
+
+  @@map("pantry_items")
+}
+
+model WeeklyPlan {
+  id            Int        @id @default(autoincrement())
+  weekStartDate DateTime   @map("week_start_date") @db.Date
+  status        PlanStatus @default(draft)
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  plannedMeals PlannedMeal[]
+  shoppingItems ShoppingItem[]
+
+  @@map("weekly_plans")
+}
+
+model PlannedMeal {
+  id       Int               @id @default(autoincrement())
+  planId   Int               @map("plan_id")
+  mealId   Int               @map("meal_id")
+  day      DayOfWeek
+  mealSlot MealSlot          @map("meal_slot")
+  servings Int               @default(2)
+  isPrep   Boolean           @default(false) @map("is_prep")
+  status   PlannedMealStatus @default(planned)
+
+  calendarEventId String? @map("calendar_event_id")
+
+  plan WeeklyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  meal Meal       @relation(fields: [mealId], references: [id])
+
+  @@map("planned_meals")
+}
+
+model ShoppingItem {
+  id             Int     @id @default(autoincrement())
+  planId         Int     @map("plan_id")
+  ingredientId   Int     @map("ingredient_id")
+  quantityNeeded Float   @map("quantity_needed")
+  quantityOnHand Float   @map("quantity_on_hand") @default(0)
+  quantityToBuy  Float   @map("quantity_to_buy")
+  checked        Boolean @default(false)
+
+  plan       WeeklyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id])
+
+  @@unique([planId, ingredientId])
+  @@map("shopping_items")
+}
