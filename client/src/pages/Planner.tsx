@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { getPlans, createPlan, generatePlan, updatePlan, updatePlannedMeal, type WeeklyPlan } from "../api/plans";
+import { syncCalendar } from "../api/calendar";
 import PlanDayColumn from "../components/PlanDayColumn";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -17,6 +18,7 @@ export default function Planner() {
   const [plans, setPlans] = useState<WeeklyPlan[]>([]);
   const [activePlan, setActivePlan] = useState<WeeklyPlan | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     getPlans().then((p) => {
@@ -68,6 +70,16 @@ export default function Planner() {
     reload();
   };
 
+  const handleSyncCalendar = async () => {
+    if (!activePlan) return;
+    setSyncing(true);
+    try {
+      await syncCalendar(activePlan.id);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -88,6 +100,12 @@ export default function Planner() {
                 Confirm Plan
               </button>
             </>
+          )}
+          {activePlan?.status === "active" && (
+            <button onClick={handleSyncCalendar} disabled={syncing}
+              className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
+              {syncing ? "Syncing..." : "Sync to Calendar"}
+            </button>
           )}
         </div>
       </div>
