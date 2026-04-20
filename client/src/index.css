@@ -1,1 +1,149 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Caveat:wght@500;600&display=swap");
 @import "tailwindcss";
+
+/* ---------- design tokens (light) ---------- */
+:root {
+  --font-display: "DM Sans", system-ui, sans-serif;
+  --font-body: "DM Sans", system-ui, sans-serif;
+
+  --bg:           oklch(0.97 0.012 85);
+  --surface-1:    oklch(0.99 0.006 85);
+  --surface-2:    oklch(0.955 0.015 82);
+  --line:         oklch(0.905 0.015 82);
+  --line-soft:    oklch(0.935 0.012 82);
+
+  --ink-1:        oklch(0.24 0.015 70);
+  --ink-2:        oklch(0.46 0.015 75);
+  --ink-3:        oklch(0.62 0.013 80);
+
+  --accent-h:     130;
+  --accent:       oklch(0.53 0.075 var(--accent-h));
+  --accent-on:    oklch(0.99 0.005 90);
+  --accent-ink:   oklch(0.38 0.07 var(--accent-h));
+  --accent-soft:  oklch(0.95 0.035 var(--accent-h));
+  --accent-line:  oklch(0.88 0.045 var(--accent-h));
+
+  --prep-soft:    oklch(0.945 0.03 50);
+  --prep-line:    oklch(0.88 0.05 50);
+  --prep-ink:     oklch(0.42 0.08 50);
+
+  --fresh-soft:   oklch(0.95 0.035 var(--accent-h));
+  --fresh-line:   oklch(0.88 0.045 var(--accent-h));
+  --fresh-ink:    oklch(0.4 0.07 var(--accent-h));
+
+  --warn-soft:    oklch(0.96 0.04 80);
+  --warn-line:    oklch(0.88 0.06 80);
+  --warn-ink:     oklch(0.45 0.1 70);
+
+  --danger:       oklch(0.55 0.12 25);
+
+  --shadow-card: 0 1px 2px rgba(60, 40, 10, 0.03), 0 1px 3px rgba(60, 40, 10, 0.04);
+  --shadow-card-hover: 0 4px 14px rgba(60, 40, 10, 0.08), 0 2px 6px rgba(60, 40, 10, 0.05);
+  --shadow-hero: 0 2px 6px rgba(60, 40, 10, 0.04), 0 10px 30px rgba(60, 40, 10, 0.06);
+}
+
+/* dark theme */
+:root[data-theme="dark"] {
+  --bg:           oklch(0.17 0.012 75);
+  --surface-1:    oklch(0.21 0.012 75);
+  --surface-2:    oklch(0.255 0.012 75);
+  --line:         oklch(0.30 0.012 75);
+  --line-soft:    oklch(0.26 0.012 75);
+  --ink-1:        oklch(0.95 0.01 80);
+  --ink-2:        oklch(0.78 0.012 80);
+  --ink-3:        oklch(0.60 0.012 80);
+  --accent:       oklch(0.68 0.09 var(--accent-h));
+  --accent-on:    oklch(0.16 0.012 75);
+  --accent-ink:   oklch(0.82 0.08 var(--accent-h));
+  --accent-soft:  oklch(0.28 0.05 var(--accent-h));
+  --accent-line:  oklch(0.36 0.07 var(--accent-h));
+  --prep-soft:    oklch(0.28 0.05 50);
+  --prep-line:    oklch(0.36 0.07 50);
+  --prep-ink:     oklch(0.82 0.08 50);
+  --fresh-soft:   oklch(0.28 0.05 var(--accent-h));
+  --fresh-line:   oklch(0.36 0.07 var(--accent-h));
+  --fresh-ink:    oklch(0.82 0.08 var(--accent-h));
+  --warn-soft:    oklch(0.30 0.06 70);
+  --warn-line:    oklch(0.40 0.08 70);
+  --warn-ink:     oklch(0.85 0.09 70);
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.25);
+  --shadow-card-hover: 0 4px 16px rgba(0,0,0,0.35);
+  --shadow-hero: 0 10px 30px rgba(0,0,0,0.35);
+}
+
+/* accent variants — drive olive/terra/paprika/mustard via hue rotation */
+:root[data-accent="olive"]      { --accent-h: 130; }
+:root[data-accent="terracotta"] { --accent-h: 40;  }
+:root[data-accent="paprika"]    { --accent-h: 28;  }
+:root[data-accent="mustard"]    { --accent-h: 85;  }
+
+/* expose tokens to Tailwind v4 utilities (bg-bg, text-ink-1, border-line, etc.) */
+@theme inline {
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+
+  --color-bg:          var(--bg);
+  --color-surface-1:   var(--surface-1);
+  --color-surface-2:   var(--surface-2);
+  --color-line:        var(--line);
+  --color-line-soft:   var(--line-soft);
+  --color-ink-1:       var(--ink-1);
+  --color-ink-2:       var(--ink-2);
+  --color-ink-3:       var(--ink-3);
+
+  --color-accent:      var(--accent);
+  --color-accent-on:   var(--accent-on);
+  --color-accent-ink:  var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+
+  --color-prep-soft:   var(--prep-soft);
+  --color-prep-line:   var(--prep-line);
+  --color-prep-ink:    var(--prep-ink);
+
+  --color-fresh-soft:  var(--fresh-soft);
+  --color-fresh-line:  var(--fresh-line);
+  --color-fresh-ink:   var(--fresh-ink);
+
+  --color-warn-soft:   var(--warn-soft);
+  --color-warn-line:   var(--warn-line);
+  --color-warn-ink:    var(--warn-ink);
+
+  --color-danger:      var(--danger);
+
+  --shadow-card:        0 1px 2px rgba(60, 40, 10, 0.03), 0 1px 3px rgba(60, 40, 10, 0.04);
+  --shadow-card-hover:  0 4px 14px rgba(60, 40, 10, 0.08), 0 2px 6px rgba(60, 40, 10, 0.05);
+  --shadow-hero:        0 2px 6px rgba(60, 40, 10, 0.04), 0 10px 30px rgba(60, 40, 10, 0.06);
+}
+
+/* base */
+* { box-sizing: border-box; }
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--ink-1);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+body {
+  font-size: 14px;
+  line-height: 1.5;
+  font-feature-settings: "ss01", "cv11";
+}
+h1, h2, h3, h4 { font-family: var(--font-display); margin: 0; }
+button { font-family: inherit; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 999px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+@keyframes amp-spin { to { transform: rotate(360deg); } }
+.amp-spin { animation: amp-spin 0.9s linear infinite; }
+
+@keyframes amp-fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+.amp-fade-in { animation: amp-fade-in 0.25s ease both; }
+
+/* hide scrollbars on horizontal day strip while keeping it scrollable */
+.amp-no-scrollbar::-webkit-scrollbar { display: none; }
+.amp-no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Sparkles, Send } from "lucide-react";
 import { sendMessage, type ChatResponse } from "../api/chat";
-import ChatMessage from "../components/ChatMessage";
+import Button from "../components/ui/Button";
 
 interface Message {
   role: "user" | "assistant";
@@ -8,66 +9,144 @@ interface Message {
   actions?: { type: string; applied: boolean }[];
 }
 
+const SUGGESTIONS = [
+  "Swap Wednesday dinner for something with chicken",
+  "We're eating out Friday, skip that meal",
+  "What can I make with what's left in the fridge?",
+  "Scale Sunday's meal prep to 6 servings instead of 4",
+];
+
+function formatBold(text: string): string {
+  // Tiny safe formatter: only **bold** spans; everything else escaped
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return escaped.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+}
+
 export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([
-    { role: "assistant", content: "Hey! I'm your meal planning assistant. Ask me to swap meals, update your plan, check what's in the fridge, or anything else." },
+    {
+      role: "assistant",
+      content: "Hey! I'm your meal planning sidekick. Ask me to swap meals, scale portions, or check what's in the fridge.",
+    },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
 
-  const handleSend = async () => {
-    if (!input.trim() || loading) return;
-    const userMsg = input.trim();
+  const handleSend = async (overrideText?: string) => {
+    const text = (overrideText ?? input).trim();
+    if (!text || loading) return;
     setInput("");
-    setMessages((prev) => [...prev, { role: "user", content: userMsg }]);
+    setMessages((prev) => [...prev, { role: "user", content: text }]);
     setLoading(true);
-
     try {
-      const res: ChatResponse = await sendMessage(userMsg);
-      setMessages((prev) => [...prev, {
-        role: "assistant",
-        content: res.message,
-        actions: res.actions.map((a, i) => ({ type: a.type, applied: res.applied[i] })),
-      }]);
+      const res: ChatResponse = await sendMessage(text);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: res.message,
+          actions: res.actions.map((a, i) => ({ type: a.type, applied: res.applied[i] })),
+        },
+      ]);
     } catch {
-      setMessages((prev) => [...prev, { role: "assistant", content: "Sorry, something went wrong. Try again?" }]);
+      setMessages((prev) => [...prev, { role: "assistant", content: "Sorry — I couldn't reach the assistant. Try again?" }]);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex flex-col h-full max-w-2xl">
-      <h2 className="text-2xl font-bold text-gray-900 mb-4">Chat</h2>
-      <div className="flex-1 overflow-y-auto mb-4 pr-2">
-        {messages.map((msg, i) => (<ChatMessage key={i} {...msg} />))}
+    <div className="flex flex-col gap-5 max-w-[780px] h-[calc(100vh-160px)] lg:h-[calc(100vh-72px)]">
+      <div className="flex items-center gap-2.5">
+        <div className="w-9 h-9 rounded-[10px] bg-accent-soft text-accent-ink grid place-items-center">
+          <Sparkles size={17} />
+        </div>
+        <div>
+          <h1 className="text-[20px] sm:text-[22px] font-semibold -tracking-[0.02em] text-ink-1">
+            Kitchen Assistant
+          </h1>
+          <div className="text-[12px] text-ink-3">Claude · knows your plan, pantry, and recipes</div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto flex flex-col gap-4 pr-1">
+        {messages.map((m, i) => (
+          <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+            <div
+              className={`max-w-[85%] sm:max-w-[78%] rounded-[16px] px-4 py-3 text-[14px] leading-relaxed ${
+                m.role === "user"
+                  ? "bg-accent text-accent-on"
+                  : "bg-surface-1 text-ink-1 border border-line shadow-[var(--shadow-card)]"
+              }`}
+            >
+              <div dangerouslySetInnerHTML={{ __html: formatBold(m.content) }} />
+              {m.actions && m.actions.length > 0 && (
+                <div className="flex gap-1.5 mt-2.5 flex-wrap">
+                  {m.actions.map((a, j) => (
+                    <span
+                      key={j}
+                      className="text-[12px] px-2.5 py-[5px] bg-surface-2 border border-line rounded-[8px] text-ink-1 font-medium"
+                    >
+                      {a.type}{a.applied ? " · applied" : ""}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
         {loading && (
-          <div className="flex justify-start mb-4">
-            <div className="bg-white border border-gray-200 rounded-2xl px-4 py-3">
-              <div className="flex gap-1">
-                <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" />
-                <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: "0.1s" }} />
-                <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
-              </div>
+          <div className="flex justify-start">
+            <div className="bg-surface-1 border border-line rounded-[16px] px-4 py-3.5 flex gap-1">
+              <Dot delay={0} /><Dot delay={120} /><Dot delay={240} />
             </div>
           </div>
         )}
         <div ref={endRef} />
       </div>
-      <div className="flex gap-2">
-        <input value={input} onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSend()}
-          placeholder="e.g. Swap Tuesday dinner for something with chicken..."
-          className="flex-1 rounded-xl border border-gray-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          disabled={loading} />
-        <button onClick={handleSend} disabled={loading || !input.trim()}
-          className="bg-blue-600 text-white px-6 py-3 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-          Send
-        </button>
+
+      <div>
+        <div className="flex gap-1.5 mb-2.5 flex-wrap">
+          {SUGGESTIONS.map((s) => (
+            <button
+              key={s}
+              onClick={() => handleSend(s)}
+              disabled={loading}
+              className="text-[12px] px-3 py-[5px] bg-surface-1 border border-line rounded-full text-ink-2 hover:border-accent-line hover:text-ink-1 transition disabled:opacity-50"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2 items-center bg-surface-1 border border-line rounded-[14px] py-2 pl-4 pr-2">
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSend()}
+            placeholder="Ask anything about your meals…"
+            disabled={loading}
+            className="flex-1 bg-transparent border-0 outline-none text-[14px] text-ink-1 placeholder:text-ink-3"
+          />
+          <Button variant="primary" icon={Send} onClick={() => handleSend()} disabled={loading || !input.trim()}>
+            Send
+          </Button>
+        </div>
       </div>
     </div>
+  );
+}
+
+function Dot({ delay }: { delay: number }) {
+  return (
+    <span
+      className="w-2 h-2 rounded-full bg-ink-3 animate-bounce"
+      style={{ animationDelay: `${delay}ms` }}
+    />
   );
 }

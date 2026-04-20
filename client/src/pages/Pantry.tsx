@@ -1,7 +1,41 @@
-import { useState, useEffect } from "react";
-import { getPantry, addPantryItem, updatePantryItem, deletePantryItem, type PantryItem } from "../api/pantry";
+import { useEffect, useMemo, useState } from "react";
+import { Plus, Refrigerator, BookMarked, Snowflake } from "lucide-react";
+import {
+  addPantryItem,
+  deletePantryItem,
+  getPantry,
+  type PantryItem,
+} from "../api/pantry";
 import { getIngredients, type Ingredient } from "../api/ingredients";
-import PantryItemRow from "../components/PantryItemRow";
+import Pill from "../components/ui/Pill";
+import Button from "../components/ui/Button";
+
+const LOCATIONS = ["fridge", "freezer", "pantry"] as const;
+const LOC_TITLES: Record<string, string> = { fridge: "Fridge", freezer: "Freezer", pantry: "Pantry" };
+const LOC_ICONS: Record<string, import("lucide-react").LucideIcon> = {
+  fridge: Refrigerator,
+  freezer: Snowflake,
+  pantry: BookMarked,
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  produce: "Produce",
+  protein: "Protein",
+  dairy: "Dairy",
+  pantry_staple: "Pantry",
+  grain: "Grains",
+  spice: "Spices",
+  condiment: "Condiments",
+  frozen: "Frozen",
+  other: "Other",
+};
+
+function expiresInDays(item: PantryItem): number | null {
+  if (!item.expirationDate) return null;
+  const ms = new Date(item.expirationDate).getTime() - Date.now();
+  if (Number.isNaN(ms)) return null;
+  return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+}
 
 export default function Pantry() {
   const [items, setItems] = useState<PantryItem[]>([]);
@@ -10,78 +44,148 @@ export default function Pantry() {
   const [newItem, setNewItem] = useState({ ingredientId: 0, quantity: 1, unit: "", location: "pantry" });
 
   const load = () => {
-    getPantry().then(setItems);
-    getIngredients().then(setIngredients);
+    getPantry().then(setItems).catch(() => setItems([]));
+    getIngredients().then(setIngredients).catch(() => setIngredients([]));
   };
-
   useEffect(load, []);
+
+  const grouped = useMemo(() => {
+    const g: Record<string, PantryItem[]> = { fridge: [], freezer: [], pantry: [] };
+    for (const it of items) (g[it.location] ?? g.pantry).push(it);
+    return g;
+  }, [items]);
 
   const handleAdd = async () => {
     if (!newItem.ingredientId) return;
     const ing = ingredients.find((i) => i.id === newItem.ingredientId);
-    await addPantryItem({ ...newItem, unit: newItem.unit || ing?.defaultUnit || "count" });
+    await addPantryItem({
+      ...newItem,
+      unit: newItem.unit || ing?.defaultUnit || "count",
+    });
     setShowAdd(false);
     setNewItem({ ingredientId: 0, quantity: 1, unit: "", location: "pantry" });
     load();
   };
 
-  const grouped = {
-    fridge: items.filter((i) => i.location === "fridge"),
-    freezer: items.filter((i) => i.location === "freezer"),
-    pantry: items.filter((i) => i.location === "pantry"),
-  };
-
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Pantry</h2>
-        <button onClick={() => setShowAdd(!showAdd)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
-          Add Item
-        </button>
+    <div className="flex flex-col gap-7">
+      <div className="flex items-end justify-between gap-3 flex-wrap">
+        <div>
+          <div className="text-[12px] uppercase tracking-[0.1em] text-ink-3 mb-1.5">
+            {items.length} item{items.length === 1 ? "" : "s"} on hand
+          </div>
+          <h1 className="text-[26px] sm:text-[30px] font-semibold -tracking-[0.02em] text-ink-1">Pantry</h1>
+        </div>
+        <Button variant="primary" icon={Plus} onClick={() => setShowAdd((v) => !v)}>
+          Add item
+        </Button>
       </div>
+
       {showAdd && (
-        <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6 flex gap-3 items-end">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Ingredient</label>
-            <select value={newItem.ingredientId} onChange={(e) => setNewItem({ ...newItem, ingredientId: Number(e.target.value) })}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm">
-              <option value={0}>Select...</option>
+        <div className="bg-surface-1 border border-line rounded-[14px] p-4 flex gap-3 items-end flex-wrap amp-fade-in">
+          <Field label="Ingredient">
+            <select
+              value={newItem.ingredientId}
+              onChange={(e) => setNewItem({ ...newItem, ingredientId: Number(e.target.value) })}
+              className="h-9 rounded-[10px] border border-line bg-surface-2 px-2.5 text-[13px] text-ink-1 outline-none focus:border-accent"
+            >
+              <option value={0}>Select…</option>
               {ingredients.map((ing) => (<option key={ing.id} value={ing.id}>{ing.name}</option>))}
             </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Quantity</label>
-            <input type="number" value={newItem.quantity} onChange={(e) => setNewItem({ ...newItem, quantity: Number(e.target.value) })}
-              className="w-24 rounded-lg border border-gray-300 px-3 py-2 text-sm" min={0} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Location</label>
-            <select value={newItem.location} onChange={(e) => setNewItem({ ...newItem, location: e.target.value })}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm">
-              <option value="fridge">Fridge</option>
-              <option value="freezer">Freezer</option>
-              <option value="pantry">Pantry</option>
+          </Field>
+          <Field label="Quantity">
+            <input
+              type="number"
+              value={newItem.quantity}
+              onChange={(e) => setNewItem({ ...newItem, quantity: Number(e.target.value) })}
+              className="h-9 w-24 rounded-[10px] border border-line bg-surface-2 px-3 text-[13px] text-ink-1 outline-none focus:border-accent tabular-nums"
+              min={0}
+            />
+          </Field>
+          <Field label="Unit">
+            <input
+              type="text"
+              value={newItem.unit}
+              onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })}
+              placeholder="auto"
+              className="h-9 w-24 rounded-[10px] border border-line bg-surface-2 px-3 text-[13px] text-ink-1 outline-none focus:border-accent"
+            />
+          </Field>
+          <Field label="Location">
+            <select
+              value={newItem.location}
+              onChange={(e) => setNewItem({ ...newItem, location: e.target.value })}
+              className="h-9 rounded-[10px] border border-line bg-surface-2 px-2.5 text-[13px] text-ink-1 outline-none focus:border-accent capitalize"
+            >
+              {LOCATIONS.map((l) => <option key={l} value={l}>{LOC_TITLES[l]}</option>)}
             </select>
-          </div>
-          <button onClick={handleAdd} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700">Add</button>
+          </Field>
+          <Button variant="primary" onClick={handleAdd}>Add</Button>
         </div>
       )}
-      {Object.entries(grouped).map(([location, locationItems]) => (
-        <div key={location} className="mb-6">
-          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2 capitalize">{location}</h3>
-          {locationItems.length === 0 ? (
-            <p className="text-xs text-gray-400">Nothing here</p>
-          ) : (
-            <div className="bg-white rounded-xl border border-gray-200 px-4">
-              {locationItems.map((item) => (
-                <PantryItemRow key={item.id} item={item}
-                  onUpdate={async (id, data) => { await updatePantryItem(id, data); load(); }}
-                  onDelete={async (id) => { await deletePantryItem(id); load(); }} />
-              ))}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+        {LOCATIONS.map((loc) => {
+          const Icon = LOC_ICONS[loc];
+          const list = grouped[loc] ?? [];
+          return (
+            <div key={loc} className="bg-surface-1 border border-line rounded-[14px] overflow-hidden">
+              <div className="flex items-center gap-2 px-4 sm:px-5 py-3.5 border-b border-line-soft">
+                <div className="w-7 h-7 rounded-[8px] bg-accent-soft text-accent-ink grid place-items-center">
+                  <Icon size={15} />
+                </div>
+                <div className="flex-1">
+                  <div className="text-[14px] font-semibold text-ink-1">{LOC_TITLES[loc]}</div>
+                  <div className="text-[11px] text-ink-3">{list.length} item{list.length === 1 ? "" : "s"}</div>
+                </div>
+              </div>
+              <div>
+                {list.length === 0 ? (
+                  <div className="px-4 sm:px-5 py-5 text-[12.5px] text-ink-3">Nothing here.</div>
+                ) : list.map((p, i) => (
+                  <Row key={p.id} item={p} last={i === list.length - 1} onDelete={async (id) => { await deletePantryItem(id); load(); }} />
+                ))}
+              </div>
             </div>
-          )}
-        </div>
-      ))}
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-[11px] uppercase tracking-[0.08em] text-ink-3 font-semibold">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function Row({ item, last, onDelete }: { item: PantryItem; last: boolean; onDelete: (id: number) => void }) {
+  const d = expiresInDays(item);
+  return (
+    <div
+      className={`grid grid-cols-[1fr_auto_auto] gap-2.5 items-center px-4 sm:px-5 py-2.5 ${last ? "" : "border-b border-line-soft"} group`}
+    >
+      <div>
+        <div className="text-[13.5px] text-ink-1 font-medium truncate">{item.ingredient.name}</div>
+        <div className="text-[11px] text-ink-3 mt-px">{CATEGORY_LABELS[item.ingredient.category] ?? item.ingredient.category}</div>
+      </div>
+      <div className="text-[13px] text-ink-2 tabular-nums">
+        {item.quantity} {item.unit}
+      </div>
+      {d != null ? (
+        <Pill tone={d <= 3 ? "warn" : "ghost"} size="sm">{d}d</Pill>
+      ) : (
+        <button
+          onClick={() => onDelete(item.id)}
+          className="text-[11px] text-ink-3 opacity-0 group-hover:opacity-100 transition hover:text-danger"
+        >
+          remove
+        </button>
+      )}
     </div>
   );
 }

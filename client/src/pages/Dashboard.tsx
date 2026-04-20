@@ -1,41 +1,122 @@
-import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { getPlans, updatePlannedMeal, type WeeklyPlan, type PlannedMeal } from "../api/plans";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  Sparkles,
+  Flame,
+  Leaf,
+  Refrigerator,
+  Clock,
+  Users,
+  Check,
+  CheckCircle2,
+  ArrowRight,
+  ChevronRight,
+  ShoppingCart,
+  MessageCircle,
+  Upload,
+  CalendarDays,
+} from "lucide-react";
+import {
+  getPlans,
+  updatePlannedMeal,
+  type WeeklyPlan,
+  type PlannedMeal,
+} from "../api/plans";
+import { getPantry, type PantryItem } from "../api/pantry";
+import { getShoppingList, type ShoppingItem } from "../api/shopping";
+import Pill from "../components/ui/Pill";
+import PhotoTile from "../components/ui/PhotoTile";
+import SectionHead from "../components/ui/SectionHead";
+import Button from "../components/ui/Button";
+import { toneForMeal } from "../theme/photoTone";
 
-const DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
+const DAY_LONG: Record<string, string> = {
+  monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday",
+  thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday",
+};
+const DAY_LABELS: Record<string, string> = {
+  monday: "Mon", tuesday: "Tue", wednesday: "Wed",
+  thursday: "Thu", friday: "Fri", saturday: "Sat", sunday: "Sun",
+};
 
-function getTodaysMeals(plan: WeeklyPlan): PlannedMeal[] {
-  const today = DAYS[new Date().getDay()];
-  return plan.plannedMeals.filter((m) => m.day === today);
+function todayKey(): string {
+  // map JS getDay (0=Sun) to monday-first key
+  const d = new Date().getDay();
+  return DAYS[(d + 6) % 7];
 }
 
-function getWeekNutrition(plan: WeeklyPlan) {
-  let calories = 0, protein = 0, carbs = 0, fat = 0;
-  for (const pm of plan.plannedMeals) {
-    if (pm.status === "skipped") continue;
-    const scale = pm.servings / pm.meal.servings;
-    calories += (pm.meal.calories || 0) * scale;
-    protein += (pm.meal.proteinG || 0) * scale;
-    carbs += (pm.meal.carbsG || 0) * scale;
-    fat += (pm.meal.fatG || 0) * scale;
-  }
-  return { calories: Math.round(calories), protein: Math.round(protein), carbs: Math.round(carbs), fat: Math.round(fat) };
+function expiresInDays(item: PantryItem): number | null {
+  if (!item.expirationDate) return null;
+  const ms = new Date(item.expirationDate).getTime() - Date.now();
+  if (Number.isNaN(ms)) return null;
+  return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
 }
 
 export default function Dashboard() {
   const [plan, setPlan] = useState<WeeklyPlan | null>(null);
+  const [pantry, setPantry] = useState<PantryItem[]>([]);
+  const [shopping, setShopping] = useState<ShoppingItem[]>([]);
+  const [now] = useState(() => new Date());
+  const navigate = useNavigate();
 
   const load = () => {
     getPlans().then((plans) => {
-      const active = plans.find((p) => p.status === "active");
-      if (active) setPlan(active);
-    });
+      const active = plans.find((p) => p.status === "active") ?? plans[0] ?? null;
+      setPlan(active);
+      if (active) getShoppingList(active.id).then(setShopping).catch(() => setShopping([]));
+    }).catch(() => setPlan(null));
+    getPantry().then(setPantry).catch(() => setPantry([]));
   };
 
   useEffect(load, []);
 
-  const todaysMeals = plan ? getTodaysMeals(plan) : [];
-  const nutrition = plan ? getWeekNutrition(plan) : null;
+  const today = todayKey();
+  const todayMeals = plan?.plannedMeals.filter((m) => m.day === today) ?? [];
+  const tonight = todayMeals.find((m) => m.mealSlot === "dinner");
+  const otherToday = todayMeals.filter((m) => m.mealSlot !== "dinner");
+
+  const upcoming = useMemo(() => {
+    if (!plan) return [];
+    const startIdx = DAYS.indexOf(today as typeof DAYS[number]);
+    return DAYS.slice(startIdx + 1, startIdx + 5).map((d) => ({
+      day: d,
+      meals: plan.plannedMeals.filter((m) => m.day === d),
+    }));
+  }, [plan, today]);
+
+  const totals = useMemo(() => {
+    if (!plan) return { calories: 0, protein: 0, carbs: 0, fat: 0 };
+    return plan.plannedMeals.reduce(
+      (acc, pm) => {
+        if (pm.status === "skipped") return acc;
+        const scale = pm.servings / (pm.meal.servings || 1);
+        acc.calories += (pm.meal.calories || 0) * scale;
+        acc.protein += (pm.meal.proteinG || 0) * scale;
+        acc.carbs   += (pm.meal.carbsG || 0) * scale;
+        acc.fat     += (pm.meal.fatG || 0) * scale;
+        return acc;
+      },
+      { calories: 0, protein: 0, carbs: 0, fat: 0 },
+    );
+  }, [plan]);
+
+  const expiringSoon = pantry
+    .map((p) => ({ p, d: expiresInDays(p) }))
+    .filter((x) => x.d != null && x.d! <= 4)
+    .sort((a, b) => (a.d! - b.d!))
+    .slice(0, 4);
+
+  const toBuyCount = shopping.filter((s) => !s.checked && s.quantityToBuy > 0).length;
+
+  const greeting = (() => {
+    const h = now.getHours();
+    if (h < 12) return "Good morning";
+    if (h < 17) return "Good afternoon";
+    return "Good evening";
+  })();
+
+  const dateLabel = now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
 
   const handleCooked = async (pm: PlannedMeal) => {
     if (!plan) return;
@@ -44,75 +125,253 @@ export default function Dashboard() {
   };
 
   return (
-    <div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Dashboard</h2>
-      {!plan ? (
-        <div className="text-center py-12">
-          <p className="text-gray-500 mb-4">No active meal plan this week.</p>
-          <Link to="/planner" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
-            Plan This Week
+    <div className="flex flex-col gap-7">
+      {/* greeting */}
+      <div>
+        <div className="text-[12px] uppercase tracking-[0.1em] text-ink-3 mb-1.5">
+          {dateLabel}
+        </div>
+        <h1 className="text-[28px] sm:text-[32px] font-semibold -tracking-[0.02em] text-ink-1">
+          {greeting}, Alex.
+        </h1>
+        <p className="text-[15px] text-ink-2 mt-1">
+          {tonight ? "Here's what's for dinner tonight." : "Nothing planned tonight — open the planner to set up the week."}
+        </p>
+      </div>
+
+      {!plan && (
+        <div className="rounded-[16px] border border-dashed border-line bg-surface-1 p-10 text-center">
+          <p className="text-ink-2 mb-4">No active meal plan this week.</p>
+          <Link
+            to="/planner"
+            className="inline-flex items-center gap-1.5 bg-accent text-accent-on rounded-[10px] px-4 py-2 text-[13px] font-medium hover:opacity-90"
+          >
+            Plan this week <ArrowRight size={14} />
           </Link>
         </div>
-      ) : (
-        <div className="space-y-6">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">Today's Meals</h3>
-            {todaysMeals.length === 0 ? (
-              <p className="text-gray-500 text-sm">Nothing planned for today.</p>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {todaysMeals.map((pm) => (
-                  <div key={pm.id} className={`bg-white rounded-xl border p-4 ${
-                    pm.status === "cooked" ? "border-green-200 bg-green-50" : "border-gray-200"
-                  }`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-medium text-gray-500 uppercase">{pm.mealSlot}</span>
-                      {pm.isPrep && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">From Prep</span>}
-                    </div>
-                    <h4 className="font-semibold text-gray-900">{pm.meal.name}</h4>
-                    <p className="text-sm text-gray-500 mt-1">{pm.servings} servings</p>
-                    {pm.meal.calories && (<p className="text-xs text-gray-400 mt-1">{pm.meal.calories} cal per serving</p>)}
-                    {pm.status === "planned" && (
-                      <button onClick={() => handleCooked(pm)} className="mt-3 text-sm text-green-600 font-medium hover:underline">
-                        Mark as Cooked
-                      </button>
-                    )}
-                    {pm.status === "cooked" && (<span className="mt-3 text-sm text-green-600 font-medium block">Cooked!</span>)}
-                  </div>
-                ))}
+      )}
+
+      {/* hero — tonight */}
+      {tonight && (
+        <article className="grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] bg-surface-1 rounded-[20px] border border-line overflow-hidden shadow-[var(--shadow-hero)]">
+          <div className="min-h-[200px] lg:min-h-[320px]">
+            <PhotoTile
+              tone={toneForMeal(tonight.meal)}
+              label={`tonight — ${tonight.meal.name.toLowerCase()}`}
+              aspect={null}
+              round={0}
+            />
+          </div>
+          <div className="p-6 sm:p-9 flex flex-col gap-4 justify-center">
+            <div className="flex gap-1.5 flex-wrap">
+              <Pill tone="accent" size="md">
+                <Sparkles size={12} /> Tonight's dinner
+              </Pill>
+              <Pill tone={tonight.isPrep ? "prep" : "fresh"} size="md">
+                {tonight.isPrep ? <Flame size={12} /> : <Leaf size={12} />}
+                {tonight.isPrep ? "From Sunday prep" : "Cook fresh"}
+              </Pill>
+              {tonight.status === "cooked" && (
+                <Pill tone="accent" size="md">
+                  <Check size={12} /> Cooked
+                </Pill>
+              )}
+            </div>
+            <h2 className="text-[24px] sm:text-[28px] font-semibold -tracking-[0.02em] leading-tight text-ink-1">
+              {tonight.meal.name}
+            </h2>
+            {tonight.meal.description && (
+              <p className="text-[14px] text-ink-2 leading-relaxed">{tonight.meal.description}</p>
+            )}
+            <div className="flex gap-5 text-[13px] text-ink-2 flex-wrap">
+              {(tonight.meal.prepTime || tonight.meal.cookTime) != null && (
+                <span className="inline-flex items-center gap-1.5">
+                  <Clock size={14} />
+                  {(tonight.meal.prepTime || 0) + (tonight.meal.cookTime || 0)} min
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1.5">
+                <Users size={14} /> {tonight.servings} servings
+              </span>
+              {tonight.meal.calories && <span>{tonight.meal.calories} cal</span>}
+            </div>
+            {tonight.isPrep && tonight.status !== "cooked" && (
+              <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-[10px] bg-prep-soft border border-prep-line text-prep-ink text-[13px]">
+                <Refrigerator size={16} />
+                <span>Pull from the fridge — reheat covered, ~5 min at 350°F.</span>
               </div>
             )}
+            <div className="flex gap-2 flex-wrap mt-1">
+              {tonight.status !== "cooked" && (
+                <Button variant="primary" icon={CheckCircle2} onClick={() => handleCooked(tonight)}>
+                  Mark as cooked
+                </Button>
+              )}
+              <Button variant="ghost" onClick={() => navigate(`/recipes/${tonight.meal.id}`)}>
+                View recipe
+              </Button>
+              <Button variant="quiet" onClick={() => navigate("/chat")}>Swap</Button>
+            </div>
           </div>
-          {nutrition && (
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">This Week's Nutrition</h3>
-              <div className="grid grid-cols-4 gap-4">
-                <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-                  <p className="text-2xl font-bold text-gray-900">{nutrition.calories}</p>
-                  <p className="text-xs text-gray-500">Total Calories</p>
+        </article>
+      )}
+
+      {/* two-column: rest of today + week, sidebar */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-6">
+        <div>
+          {plan && (
+            <>
+              <SectionHead eyebrow="Rest of today" title="Other meals" />
+              <div className="flex flex-col gap-2.5">
+                {otherToday.length === 0 ? (
+                  <div className="text-[13px] text-ink-3 py-2">No other meals planned today.</div>
+                ) : otherToday.map((pm) => (
+                  <button
+                    key={pm.id}
+                    onClick={() => navigate(`/recipes/${pm.meal.id}`)}
+                    className="flex items-center gap-3.5 p-3.5 bg-surface-1 border border-line rounded-[14px] text-left transition hover:shadow-[var(--shadow-card-hover)]"
+                  >
+                    <div className="w-[64px] sm:w-[72px] flex-shrink-0">
+                      <PhotoTile tone={toneForMeal(pm.meal)} aspect="1 / 1" round={10} compact />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[11px] uppercase tracking-[0.08em] text-ink-3 mb-0.5">{pm.mealSlot}</div>
+                      <div className="text-[15px] font-semibold text-ink-1 -tracking-[0.01em] truncate">{pm.meal.name}</div>
+                      <div className="text-[12px] text-ink-3 mt-0.5">
+                        {pm.servings} servings{pm.meal.calories ? ` · ${pm.meal.calories} cal` : ""}
+                      </div>
+                    </div>
+                    {pm.status === "cooked" ? (
+                      <Pill tone="accent" size="sm"><Check size={11} /> Cooked</Pill>
+                    ) : (
+                      <ChevronRight size={18} className="text-ink-3" />
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-8">
+                <SectionHead
+                  eyebrow="Coming up"
+                  title="This week"
+                  action={
+                    <Button variant="quiet" size="sm" onClick={() => navigate("/planner")}>
+                      Full planner <ArrowRight size={13} />
+                    </Button>
+                  }
+                />
+                <div className="bg-surface-1 border border-line rounded-[14px] overflow-hidden">
+                  {upcoming.length === 0 ? (
+                    <div className="p-5 text-[13px] text-ink-3">Nothing planned for the rest of the week.</div>
+                  ) : upcoming.map(({ day, meals }) => {
+                    const dinner = meals.find((m) => m.mealSlot === "dinner");
+                    return (
+                      <div
+                        key={day}
+                        className="grid grid-cols-[88px_1fr_auto] items-center px-4 sm:px-5 py-3.5 border-b border-line-soft last:border-b-0"
+                      >
+                        <div>
+                          <div className="text-[13px] font-semibold text-ink-1 capitalize">{DAY_LABELS[day]}</div>
+                          <div className="text-[11px] text-ink-3">{meals.length} meal{meals.length !== 1 ? "s" : ""}</div>
+                        </div>
+                        {dinner ? (
+                          <div className="min-w-0">
+                            <div className="text-[14px] text-ink-1 font-medium truncate">{dinner.meal.name}</div>
+                            <div className="text-[12px] text-ink-3">
+                              {dinner.isPrep ? "From prep" : "Cook fresh"} · {dinner.servings} servings
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-[13px] text-ink-3 italic">Open night</div>
+                        )}
+                        <Pill tone={dinner?.isPrep ? "prep" : "fresh"} size="sm">
+                          {dinner?.isPrep ? <Flame size={10} /> : <Leaf size={10} />}
+                          {dinner?.isPrep ? "Prep" : "Fresh"}
+                        </Pill>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-                  <p className="text-2xl font-bold text-gray-900">{nutrition.protein}g</p>
-                  <p className="text-xs text-gray-500">Protein</p>
-                </div>
-                <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-                  <p className="text-2xl font-bold text-gray-900">{nutrition.carbs}g</p>
-                  <p className="text-xs text-gray-500">Carbs</p>
-                </div>
-                <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-                  <p className="text-2xl font-bold text-gray-900">{nutrition.fat}g</p>
-                  <p className="text-xs text-gray-500">Fat</p>
-                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* right column */}
+        <div className="flex flex-col gap-4">
+          {plan && (
+            <div className="bg-surface-1 border border-line rounded-[14px] p-4 sm:p-5">
+              <div className="text-[11px] uppercase tracking-[0.08em] text-ink-3 mb-2.5">This week · 7 days</div>
+              <div className="grid grid-cols-2 gap-3">
+                <Stat label="Calories" value={Math.round(totals.calories).toLocaleString()} />
+                <Stat label="Protein"  value={`${Math.round(totals.protein)}g`} />
+                <Stat label="Carbs"    value={`${Math.round(totals.carbs)}g`} />
+                <Stat label="Fat"      value={`${Math.round(totals.fat)}g`} />
               </div>
             </div>
           )}
-          <div className="flex gap-3">
-            <Link to="/planner" className="text-sm text-blue-600 hover:underline">View Full Plan</Link>
-            <Link to="/shopping" className="text-sm text-blue-600 hover:underline">Shopping List</Link>
-            <Link to="/chat" className="text-sm text-blue-600 hover:underline">Chat with Assistant</Link>
+
+          {expiringSoon.length > 0 && (
+            <div className="bg-surface-1 border border-line rounded-[14px] p-4 sm:p-5">
+              <div className="flex items-center justify-between mb-2.5">
+                <div className="text-[11px] uppercase tracking-[0.08em] text-ink-3">Use soon</div>
+                <button
+                  onClick={() => navigate("/pantry")}
+                  className="text-[12px] text-accent-ink hover:underline"
+                >
+                  Pantry →
+                </button>
+              </div>
+              <div className="flex flex-col gap-2">
+                {expiringSoon.map(({ p, d }) => (
+                  <div key={p.id} className="flex items-center justify-between text-[13px]">
+                    <span className="text-ink-1 truncate pr-2">{p.ingredient.name}</span>
+                    <Pill tone="warn" size="sm">{d}d</Pill>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="bg-surface-1 border border-line rounded-[14px] p-1.5">
+            <Shortcut icon={ShoppingCart} label="Shopping list" sub={`${toBuyCount} items to buy`} to="/shopping" />
+            <Shortcut icon={MessageCircle} label="Ask the assistant" sub="Swap, skip, or scale meals" to="/chat" />
+            <Shortcut icon={Upload} label="Import a recipe" sub="Upload a PDF or photo" to="/recipes/import" />
+            {!plan && (
+              <Shortcut icon={CalendarDays} label="Plan this week" sub="Sunday prep starts here" to="/planner" last />
+            )}
           </div>
         </div>
-      )}
+      </div>
     </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-[22px] font-semibold text-ink-1 -tracking-[0.02em] leading-none">{value}</div>
+      <div className="text-[11px] uppercase tracking-[0.08em] text-ink-3 mt-1">{label}</div>
+    </div>
+  );
+}
+
+function Shortcut({
+  icon: Icon, label, sub, to, last,
+}: { icon: import("lucide-react").LucideIcon; label: string; sub: string; to: string; last?: boolean }) {
+  return (
+    <Link
+      to={to}
+      className={`flex items-center gap-3 w-full px-3.5 py-3 text-left transition rounded-[10px] hover:bg-surface-2 ${last ? "" : "border-b border-line-soft"}`}
+    >
+      <div className="w-9 h-9 rounded-[10px] bg-accent-soft text-accent-ink grid place-items-center flex-shrink-0">
+        <Icon size={17} strokeWidth={1.85} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[13.5px] font-medium text-ink-1 truncate">{label}</div>
+        <div className="text-[11.5px] text-ink-3 truncate">{sub}</div>
+      </div>
+      <ChevronRight size={16} className="text-ink-3" />
+    </Link>
   );
 }
