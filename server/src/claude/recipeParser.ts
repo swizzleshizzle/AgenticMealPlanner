@@ -1,5 +1,4 @@
 import { callClaude } from "./cli.js";
-import { readFile } from "fs/promises";
 import path from "path";
 
 interface ParsedRecipe {
@@ -27,16 +26,15 @@ interface ParsedRecipe {
 }
 
 export async function parseRecipeFromFile(filePath: string): Promise<ParsedRecipe> {
+  const absolutePath = path.resolve(filePath);
   const ext = path.extname(filePath).toLowerCase();
-  const fileContent = await readFile(filePath);
-  const base64 = fileContent.toString("base64");
+  const fileType = ext === ".pdf" ? "PDF"
+    : ext === ".png" || ext === ".jpg" || ext === ".jpeg" || ext === ".webp" ? "image"
+    : "file";
 
-  const mediaType = ext === ".pdf" ? "application/pdf"
-    : ext === ".png" ? "image/png"
-    : ext === ".jpg" || ext === ".jpeg" ? "image/jpeg"
-    : "application/octet-stream";
+  const prompt = `Read the Hello Fresh recipe card ${fileType} at this path: ${absolutePath}
 
-  const prompt = `You are a recipe parser. You will receive a Hello Fresh recipe card (as a ${mediaType} file encoded in base64). Extract all recipe information and return ONLY valid JSON matching this exact schema — no markdown, no explanation:
+Extract all recipe information and return ONLY valid JSON matching this exact schema — no markdown, no explanation, no commentary:
 
 {
   "name": "string",
@@ -64,18 +62,43 @@ export async function parseRecipeFromFile(filePath: string): Promise<ParsedRecip
   ]
 }
 
-For tags, include protein type, cuisine, and any relevant descriptors (quick, vegetarian, etc).
+For tags, include protein type, cuisine, and any relevant descriptors (quick, vegetarian, etc).`;
 
-Base64 file content:
-${base64}`;
+  const raw = await callClaude(prompt, {
+    timeout: 300_000,
+    addDirs: [path.dirname(absolutePath)],
+    allowedTools: ["Read"],
+  });
 
-  const raw = await callClaude(prompt, { timeout: 180_000 });
-
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error("Failed to extract JSON from Claude response");
+  const jsonText = extractJson(raw);
+  if (!jsonText) {
+    const debugPath = `/tmp/recipe-parse-fail-${Date.now()}.txt`;
+    try {
+      const { writeFile } = await import("fs/promises");
+      await writeFile(debugPath, `FILE: ${absolutePath}\n\nRAW RESPONSE:\n${raw}`);
+    } catch {}
+    throw new Error(`Failed to extract JSON from Claude response (raw saved to ${debugPath})`);
   }
 
-  const parsed: ParsedRecipe = JSON.parse(jsonMatch[0]);
-  return parsed;
+  try {
+    const parsed: ParsedRecipe = JSON.parse(jsonText);
+    return parsed;
+  } catch (e: any) {
+    throw new Error(`Failed to parse JSON: ${e.message}`);
+  }
+}
+
+function extractJson(raw: string): string | null {
+  // Try fenced code block first (```json ... ``` or ``` ... ```)
+  const fenceMatch = raw.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  if (fenceMatch) {
+    const inside = fenceMatch[1].trim();
+    if (inside.startsWith("{") && inside.endsWith("}")) return inside;
+  }
+
+  // Fall back to greedy {...} match
+  const braceMatch = raw.match(/\{[\s\S]*\}/);
+  if (braceMatch) return braceMatch[0];
+
+  return null;
 }
