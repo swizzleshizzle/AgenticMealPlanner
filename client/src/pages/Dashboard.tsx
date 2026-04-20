@@ -53,6 +53,17 @@ function expiresInDays(item: PantryItem): number | null {
   return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
 }
 
+/** Returns true if the plan's week (7 days from weekStartDate) covers today. */
+function planCoversToday(plan: WeeklyPlan): boolean {
+  const start = new Date(plan.weekStartDate);
+  if (Number.isNaN(start.getTime())) return false;
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 7);
+  const now = Date.now();
+  return now >= start.getTime() && now < end.getTime();
+}
+
 export default function Dashboard() {
   const [plan, setPlan] = useState<WeeklyPlan | null>(null);
   const [pantry, setPantry] = useState<PantryItem[]>([]);
@@ -72,22 +83,24 @@ export default function Dashboard() {
   useEffect(load, []);
 
   const today = todayKey();
-  const todayMeals = plan?.plannedMeals.filter((m) => m.day === today) ?? [];
+  const planIsCurrent = plan ? planCoversToday(plan) : false;
+  const currentPlan = planIsCurrent ? plan : null;
+  const todayMeals = currentPlan?.plannedMeals.filter((m) => m.day === today) ?? [];
   const tonight = todayMeals.find((m) => m.mealSlot === "dinner");
   const otherToday = todayMeals.filter((m) => m.mealSlot !== "dinner");
 
   const upcoming = useMemo(() => {
-    if (!plan) return [];
+    if (!currentPlan) return [];
     const startIdx = DAYS.indexOf(today as typeof DAYS[number]);
     return DAYS.slice(startIdx + 1, startIdx + 5).map((d) => ({
       day: d,
-      meals: plan.plannedMeals.filter((m) => m.day === d),
+      meals: currentPlan.plannedMeals.filter((m) => m.day === d),
     }));
-  }, [plan, today]);
+  }, [currentPlan, today]);
 
   const totals = useMemo(() => {
-    if (!plan) return { calories: 0, protein: 0, carbs: 0, fat: 0 };
-    return plan.plannedMeals.reduce(
+    if (!currentPlan) return { calories: 0, protein: 0, carbs: 0, fat: 0 };
+    return currentPlan.plannedMeals.reduce(
       (acc, pm) => {
         if (pm.status === "skipped") return acc;
         const scale = pm.servings / (pm.meal.servings || 1);
@@ -132,16 +145,18 @@ export default function Dashboard() {
           {dateLabel}
         </div>
         <h1 className="text-[28px] sm:text-[32px] font-semibold -tracking-[0.02em] text-ink-1">
-          {greeting}, Alex.
+          {greeting}, Mike.
         </h1>
         <p className="text-[15px] text-ink-2 mt-1">
           {tonight ? "Here's what's for dinner tonight." : "Nothing planned tonight — open the planner to set up the week."}
         </p>
       </div>
 
-      {!plan && (
+      {!currentPlan && (
         <div className="rounded-[16px] border border-dashed border-line bg-surface-1 p-10 text-center">
-          <p className="text-ink-2 mb-4">No active meal plan this week.</p>
+          <p className="text-ink-2 mb-4">
+            {plan ? "Last week's plan has ended — time to plan the new week." : "No active meal plan this week."}
+          </p>
           <Link
             to="/planner"
             className="inline-flex items-center gap-1.5 bg-accent text-accent-on rounded-[10px] px-4 py-2 text-[13px] font-medium hover:opacity-90"
@@ -219,7 +234,7 @@ export default function Dashboard() {
       {/* two-column: rest of today + week, sidebar */}
       <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-6">
         <div>
-          {plan && (
+          {currentPlan && (
             <>
               <SectionHead eyebrow="Rest of today" title="Other meals" />
               <div className="flex flex-col gap-2.5">
@@ -299,7 +314,7 @@ export default function Dashboard() {
 
         {/* right column */}
         <div className="flex flex-col gap-4">
-          {plan && (
+          {currentPlan && (
             <div className="bg-surface-1 border border-line rounded-[14px] p-4 sm:p-5">
               <div className="text-[11px] uppercase tracking-[0.08em] text-ink-3 mb-2.5">This week · 7 days</div>
               <div className="grid grid-cols-2 gap-3">
@@ -337,7 +352,7 @@ export default function Dashboard() {
             <Shortcut icon={ShoppingCart} label="Shopping list" sub={`${toBuyCount} items to buy`} to="/shopping" />
             <Shortcut icon={MessageCircle} label="Ask the assistant" sub="Swap, skip, or scale meals" to="/chat" />
             <Shortcut icon={Upload} label="Import a recipe" sub="Upload a PDF or photo" to="/recipes/import" />
-            {!plan && (
+            {!currentPlan && (
               <Shortcut icon={CalendarDays} label="Plan this week" sub="Sunday prep starts here" to="/planner" last />
             )}
           </div>
