@@ -59,7 +59,7 @@ function Brand() {
       </div>
       <div>
         <div className="text-[15px] font-bold text-ink-1 -tracking-[0.015em]">Meal Planner</div>
-        <div className="text-[11px] text-ink-3">Alex &amp; Sam</div>
+        <div className="text-[11px] text-ink-3">REDACTED</div>
       </div>
     </div>
   );
@@ -70,10 +70,10 @@ function ProfileFooter() {
     <div className="px-4 py-3.5 border-t border-line-soft flex items-center gap-2.5">
       <div className="w-8 h-8 rounded-full grid place-items-center text-accent-on text-[12px] font-semibold"
            style={{ background: "linear-gradient(135deg, var(--accent) 0%, var(--accent-ink) 100%)" }}>
-        A
+        M
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-[12.5px] font-semibold text-ink-1 truncate">Alex Morgan</div>
+        <div className="text-[12.5px] font-semibold text-ink-1 truncate">REDACTED</div>
         <div className="text-[10.5px] text-ink-3 truncate">Self-hosted · Tailscale</div>
       </div>
     </div>
