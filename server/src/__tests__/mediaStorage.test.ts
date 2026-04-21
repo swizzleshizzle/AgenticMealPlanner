@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect } from "vitest";
 import path from "path";
 import { writeFile, rm, mkdir } from "fs/promises";
 import os from "os";
@@ -8,6 +8,7 @@ import {
   mealThumbPath,
   hashFile,
   ensureMealDir,
+  relStoragePath,
 } from "../services/mediaStorage.js";
 
 describe("mediaStorage", () => {
@@ -26,19 +27,31 @@ describe("mediaStorage", () => {
   it("hashFile returns consistent sha256 for identical content", async () => {
     const tmp = path.join(os.tmpdir(), `amp-test-${Date.now()}.bin`);
     await writeFile(tmp, "hello world");
-    const a = await hashFile(tmp);
-    const b = await hashFile(tmp);
-    expect(a).toBe(b);
-    expect(a).toHaveLength(64);
-    await rm(tmp);
+    try {
+      const a = await hashFile(tmp);
+      const b = await hashFile(tmp);
+      expect(a).toBe(b);
+      expect(a).toHaveLength(64);
+    } finally {
+      await rm(tmp);
+    }
   });
 
   it("ensureMealDir creates the directory", async () => {
     const id = 999_900 + Math.floor(Math.random() * 100);
     const dir = await ensureMealDir(id);
-    expect(dir).toBe(mealDir(id));
-    // writing a file should succeed → dir exists
-    await writeFile(path.join(dir, "probe.txt"), "ok");
-    await rm(dir, { recursive: true, force: true });
+    try {
+      expect(dir).toBe(mealDir(id));
+      await writeFile(path.join(dir, "probe.txt"), "ok");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("relStoragePath returns forward-slash-only relative path", () => {
+    const abs = path.join(process.cwd(), "storage", "meals", "7", "thumb.jpg");
+    const rel = relStoragePath(abs);
+    expect(rel).toBe("storage/meals/7/thumb.jpg");
+    expect(rel).not.toContain("\\");
   });
 });
