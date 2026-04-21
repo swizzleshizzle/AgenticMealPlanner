@@ -38,7 +38,8 @@ interface CreateMealInput {
   description?: string;
   source?: "hello_fresh" | "manual";
   sourceUrl?: string;
-  mealType: "batch_prep" | "cook_fresh";
+  canBatch?: boolean;
+  canFresh?: boolean;
   servings: number;
   prepTime?: number;
   cookTime?: number;
@@ -54,12 +55,44 @@ interface CreateMealInput {
   ingredients?: IngredientInput[];
 }
 
+interface CapabilityInput { canBatch?: boolean; canFresh?: boolean }
+interface ExistingCapability { canBatch: boolean; canFresh: boolean }
+interface ResolvedCapability {
+  canBatch: boolean;
+  canFresh: boolean;
+  mealType: "batch_prep" | "cook_fresh";
+}
+
+/**
+ * Resolves the capability write for create/update. For create, pass
+ * existing=null; missing flags default to canFresh=true, canBatch=false. For
+ * update, pass the current row; missing flags inherit from it, and if
+ * neither flag is present in the patch the function returns null (no write).
+ * The returned mealType mirrors the booleans for stage-1 back-compat — primary
+ * is cook_fresh when both are true.
+ */
+export function resolveCapabilityWrite(
+  input: CapabilityInput,
+  existing: ExistingCapability | null,
+): ResolvedCapability | null {
+  if (existing && input.canBatch === undefined && input.canFresh === undefined) {
+    return null;
+  }
+  const canFresh = input.canFresh ?? existing?.canFresh ?? true;
+  const canBatch = input.canBatch ?? existing?.canBatch ?? false;
+  const mealType: "batch_prep" | "cook_fresh" =
+    canBatch && !canFresh ? "batch_prep" : "cook_fresh";
+  return { canBatch, canFresh, mealType };
+}
+
 export async function createMeal(data: CreateMealInput) {
-  const { ingredients, instructions, ...mealData } = data;
+  const { ingredients, instructions, canBatch, canFresh, ...rest } = data;
+  const capability = resolveCapabilityWrite({ canBatch, canFresh }, null)!;
 
   return prisma.meal.create({
     data: {
-      ...mealData,
+      ...rest,
+      ...capability,
       instructions: JSON.stringify(instructions),
       ingredients: ingredients
         ? {
@@ -77,11 +110,20 @@ export async function createMeal(data: CreateMealInput) {
 }
 
 export async function updateMeal(id: number, data: Partial<CreateMealInput>) {
-  const { ingredients, instructions, ...mealData } = data;
+  const { ingredients, instructions, canBatch, canFresh, ...rest } = data;
 
-  const updateData: any = { ...mealData };
+  const updateData: any = { ...rest };
   if (instructions) {
     updateData.instructions = JSON.stringify(instructions);
+  }
+
+  if (canBatch !== undefined || canFresh !== undefined) {
+    const existing = await prisma.meal.findUniqueOrThrow({
+      where: { id },
+      select: { canBatch: true, canFresh: true },
+    });
+    const capability = resolveCapabilityWrite({ canBatch, canFresh }, existing);
+    if (capability) Object.assign(updateData, capability);
   }
 
   if (ingredients) {
