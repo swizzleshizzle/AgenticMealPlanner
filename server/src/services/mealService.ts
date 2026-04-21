@@ -114,5 +114,6 @@ export async function replaceMealPhoto(mealId: number, tmpPath: string) {
   return prisma.meal.update({
     where: { id: mealId },
     data: { imagePath: relStoragePath(dest), imageSource: "manual" },
+    include: mealWithIngredients,
   });
 }
