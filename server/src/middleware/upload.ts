@@ -26,3 +26,27 @@ export const upload = multer({
     }
   },
 });
+
+export const uploadImage = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadDir),
+    filename: (_req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
+  }),
+  fileFilter: (_req, file, cb) => {
+    if (/^image\/(jpeg|png|webp)$/.test(file.mimetype)) cb(null, true);
+    else cb(new Error("Only JPEG/PNG/WebP images allowed"));
+  },
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
+
+export const uploadPdfOnly = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadDir),
+    filename: (_req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
+  }),
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === "application/pdf") cb(null, true);
+    else cb(new Error("Only PDF files allowed"));
+  },
+  limits: { fileSize: 15 * 1024 * 1024 },
+});

@@ -1,4 +1,6 @@
 import { PrismaClient } from "@prisma/client";
+import { copyFile, unlink } from "fs/promises";
+import { ensureMealDir, mealThumbPath, relStoragePath } from "./mediaStorage.js";
 
 const prisma = new PrismaClient();
 
@@ -102,4 +104,15 @@ export async function updateMeal(id: number, data: Partial<CreateMealInput>) {
 
 export async function deleteMeal(id: number) {
   return prisma.meal.delete({ where: { id } });
+}
+
+export async function replaceMealPhoto(mealId: number, tmpPath: string) {
+  await ensureMealDir(mealId);
+  const dest = mealThumbPath(mealId);
+  await copyFile(tmpPath, dest);
+  try { await unlink(tmpPath); } catch {}
+  return prisma.meal.update({
+    where: { id: mealId },
+    data: { imagePath: relStoragePath(dest), imageSource: "manual" },
+  });
 }
