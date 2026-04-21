@@ -53,15 +53,29 @@ function expiresInDays(item: PantryItem): number | null {
   return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
 }
 
+function planWeekStart(plan: WeeklyPlan): Date {
+  // Slice the date portion so "YYYY-MM-DD" and full-ISO inputs both produce
+  // local midnight on the calendar date (avoids the TZ-shift that
+  // new Date(fullIso).setHours(0,0,0,0) produces in negative-offset zones).
+  return new Date(plan.weekStartDate.slice(0, 10) + "T00:00:00");
+}
+
 /** Returns true if the plan's week (7 days from weekStartDate) covers today. */
 function planCoversToday(plan: WeeklyPlan): boolean {
-  const start = new Date(plan.weekStartDate);
+  const start = planWeekStart(plan);
   if (Number.isNaN(start.getTime())) return false;
-  start.setHours(0, 0, 0, 0);
   const end = new Date(start);
   end.setDate(end.getDate() + 7);
   const now = Date.now();
   return now >= start.getTime() && now < end.getTime();
+}
+
+function planNotPast(plan: WeeklyPlan): boolean {
+  const start = planWeekStart(plan);
+  if (Number.isNaN(start.getTime())) return false;
+  const end = new Date(start);
+  end.setDate(end.getDate() + 7);
+  return end.getTime() > Date.now();
 }
 
 export default function Dashboard() {
@@ -73,9 +87,14 @@ export default function Dashboard() {
 
   const load = () => {
     getPlans().then((plans) => {
-      const active = plans.find((p) => p.status === "active") ?? plans[0] ?? null;
-      setPlan(active);
-      if (active) getShoppingList(active.id).then(setShopping).catch(() => setShopping([]));
+      // Prefer the plan covering today; otherwise surface the soonest upcoming
+      // so the dashboard is useful in the gap between active plans.
+      const candidates = plans
+        .filter(planNotPast)
+        .sort((a, b) => a.weekStartDate.localeCompare(b.weekStartDate));
+      const next = candidates.find(planCoversToday) ?? candidates[0] ?? null;
+      setPlan(next);
+      if (next) getShoppingList(next.id).then(setShopping).catch(() => setShopping([]));
     }).catch(() => setPlan(null));
     getPantry().then(setPantry).catch(() => setPantry([]));
   };
@@ -152,11 +171,13 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {!currentPlan && (
+      {!currentPlan && plan && (
+        <UpcomingPlanCard plan={plan} />
+      )}
+
+      {!currentPlan && !plan && (
         <div className="rounded-[16px] border border-dashed border-line bg-surface-1 p-10 text-center">
-          <p className="text-ink-2 mb-4">
-            {plan ? "Last week's plan has ended — time to plan the new week." : "No active meal plan this week."}
-          </p>
+          <p className="text-ink-2 mb-4">No active meal plan this week.</p>
           <Link
             to="/planner"
             className="inline-flex items-center gap-1.5 bg-accent text-accent-on rounded-[10px] px-4 py-2 text-[13px] font-medium hover:opacity-90"
@@ -406,5 +427,70 @@ function Shortcut({
       </div>
       <ChevronRight size={16} className="text-ink-3" />
     </Link>
+  );
+}
+
+function UpcomingPlanCard({ plan }: { plan: WeeklyPlan }) {
+  const start = planWeekStart(plan);
+  const startLabel = start.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+  const ms = start.getTime() - Date.now();
+  const daysAway = Math.max(1, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+  // Show first day's meals as a preview (or first 3 meals if multi-day spread).
+  const firstDayKey = DAYS[0];
+  const firstDayMeals = plan.plannedMeals.filter((m) => m.day === firstDayKey).slice(0, 3);
+  const preview = firstDayMeals.length > 0
+    ? firstDayMeals
+    : plan.plannedMeals.slice(0, 3);
+
+  return (
+    <article className="bg-surface-1 rounded-[20px] border border-line overflow-hidden p-5 sm:p-6">
+      <div className="flex items-start justify-between gap-4 flex-wrap mb-4">
+        <div>
+          <Pill tone="accent" size="md">
+            <CalendarDays size={12} /> Coming up
+          </Pill>
+          <h2 className="text-[20px] sm:text-[22px] font-semibold -tracking-[0.02em] text-ink-1 mt-2">
+            Next plan starts {startLabel}
+          </h2>
+          <p className="text-[13px] text-ink-3 mt-1">
+            {daysAway === 1 ? "Tomorrow" : `${daysAway} days away`} · {plan.plannedMeals.length} meals queued
+          </p>
+        </div>
+        <Link
+          to="/planner"
+          className="inline-flex items-center gap-1.5 bg-accent text-accent-on rounded-[10px] px-4 py-2 text-[13px] font-medium hover:opacity-90"
+        >
+          View plan <ArrowRight size={14} />
+        </Link>
+      </div>
+      {preview.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          {preview.map((pm) => (
+            <Link
+              key={pm.id}
+              to={`/recipes/${pm.meal.id}`}
+              className="flex items-center gap-3 p-2.5 bg-surface-2 border border-line-soft rounded-[12px] text-left hover:border-line transition"
+            >
+              <div className="w-12 h-12 rounded-[8px] overflow-hidden flex-shrink-0">
+                {pm.meal.imagePath ? (
+                  <img
+                    src={`/media/meals/${pm.meal.id}/thumb.jpg`}
+                    alt={pm.meal.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                  />
+                ) : (
+                  <PhotoTile tone={toneForMeal(pm.meal)} aspect="1 / 1" round={8} compact />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[12.5px] font-semibold text-ink-1 leading-tight line-clamp-2">{pm.meal.name}</div>
+                <div className="text-[10.5px] text-ink-3 mt-0.5 capitalize">{pm.day} · {pm.mealSlot}</div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </article>
   );
 }

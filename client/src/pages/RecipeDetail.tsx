@@ -218,23 +218,19 @@ function MealAssetActions({ meal, onUpdated }: { meal: Meal; onUpdated: (m: Meal
         {busy === "photo" ? "Uploading…" : "Replace photo"}
       </Button>
 
-      {!meal.pdfPath && (
-        <>
-          <input
-            ref={pdfInput}
-            type="file"
-            accept="application/pdf"
-            className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) guardAsync("pdf", () => uploadMealPdf(meal.id, f)); }}
-          />
-          <Button variant="ghost" size="sm" icon={FileUp}
-            disabled={busy !== null}
-            onClick={() => pdfInput.current?.click()}
-          >
-            {busy === "pdf" ? "Uploading…" : "Upload PDF"}
-          </Button>
-        </>
-      )}
+      <input
+        ref={pdfInput}
+        type="file"
+        accept="application/pdf"
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) guardAsync("pdf", () => uploadMealPdf(meal.id, f)); }}
+      />
+      <Button variant="ghost" size="sm" icon={FileUp}
+        disabled={busy !== null}
+        onClick={() => pdfInput.current?.click()}
+      >
+        {busy === "pdf" ? "Uploading…" : meal.pdfPath ? "Replace PDF" : "Upload PDF"}
+      </Button>
 
       {meal.pdfPath && (
         <Button variant="ghost" size="sm" icon={RefreshCw}
