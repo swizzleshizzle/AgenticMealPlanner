@@ -6,7 +6,6 @@ describe("resolveCapabilityWrite", () => {
     expect(resolveCapabilityWrite({}, null)).toEqual({
       canBatch: false,
       canFresh: true,
-      mealType: "cook_fresh",
     });
   });
 
@@ -14,7 +13,6 @@ describe("resolveCapabilityWrite", () => {
     expect(resolveCapabilityWrite({ canBatch: true, canFresh: false }, null)).toEqual({
       canBatch: true,
       canFresh: false,
-      mealType: "batch_prep",
     });
   });
 
@@ -22,7 +20,6 @@ describe("resolveCapabilityWrite", () => {
     expect(resolveCapabilityWrite({ canBatch: true, canFresh: true }, null)).toEqual({
       canBatch: true,
       canFresh: true,
-      mealType: "cook_fresh",
     });
   });
 
@@ -31,7 +28,6 @@ describe("resolveCapabilityWrite", () => {
     expect(resolveCapabilityWrite({ canBatch: true }, existing)).toEqual({
       canBatch: true,
       canFresh: true,
-      mealType: "cook_fresh",
     });
   });
 
@@ -40,7 +36,6 @@ describe("resolveCapabilityWrite", () => {
     expect(resolveCapabilityWrite({ canBatch: true, canFresh: false }, existing)).toEqual({
       canBatch: true,
       canFresh: false,
-      mealType: "batch_prep",
     });
   });
 

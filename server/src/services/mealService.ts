@@ -60,7 +60,6 @@ interface ExistingCapability { canBatch: boolean; canFresh: boolean }
 interface ResolvedCapability {
   canBatch: boolean;
   canFresh: boolean;
-  mealType: "batch_prep" | "cook_fresh";
 }
 
 /**
@@ -68,8 +67,6 @@ interface ResolvedCapability {
  * existing=null; missing flags default to canFresh=true, canBatch=false. For
  * update, pass the current row; missing flags inherit from it, and if
  * neither flag is present in the patch the function returns null (no write).
- * The returned mealType mirrors the booleans for stage-1 back-compat — primary
- * is cook_fresh when both are true.
  */
 export function resolveCapabilityWrite(
   input: CapabilityInput,
@@ -80,9 +77,7 @@ export function resolveCapabilityWrite(
   }
   const canFresh = input.canFresh ?? existing?.canFresh ?? true;
   const canBatch = input.canBatch ?? existing?.canBatch ?? false;
-  const mealType: "batch_prep" | "cook_fresh" =
-    canBatch && !canFresh ? "batch_prep" : "cook_fresh";
-  return { canBatch, canFresh, mealType };
+  return { canBatch, canFresh };
 }
 
 export async function createMeal(data: CreateMealInput) {

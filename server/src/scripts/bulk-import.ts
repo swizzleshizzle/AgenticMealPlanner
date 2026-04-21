@@ -31,7 +31,6 @@ async function importOne(filePath: string) {
       source: "hello_fresh",
       canBatch: false,
       canFresh: true,
-      mealType: "cook_fresh",
       servings: parsed.servings,
       prepTime: parsed.prepTime ?? undefined,
       cookTime: parsed.cookTime ?? undefined,
