@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Clock, Users, Flame, Leaf } from "lucide-react";
 import type { Meal } from "../api/meals";
@@ -22,7 +23,13 @@ export default function MealCard({ meal, photos = true, compact = false, to }: P
       to={to ?? `/recipes/${meal.id}`}
       className="flex flex-col bg-surface-1 border border-line rounded-[14px] overflow-hidden text-left shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-[2px] transition motion-reduce:transition-none"
     >
-      {photos && <PhotoTile tone={tone} label={meal.name.toLowerCase()} aspect="16 / 10" round={0} />}
+      {photos && (
+        meal.imagePath ? (
+          <MealCardImage mealId={meal.id} alt={meal.name} tone={tone} />
+        ) : (
+          <PhotoTile tone={tone} label={meal.name.toLowerCase()} aspect="16 / 10" round={0} />
+        )
+      )}
       <div className={`flex flex-col gap-2 ${compact ? "p-3.5" : "p-4"}`}>
         <div className="flex items-center gap-1.5 flex-wrap">
           <Pill tone={isPrep ? "prep" : "fresh"} size="sm">
@@ -59,5 +66,21 @@ export default function MealCard({ meal, photos = true, compact = false, to }: P
         )}
       </div>
     </Link>
+  );
+}
+
+function MealCardImage({ mealId, alt, tone }: { mealId: number; alt: string; tone: ReturnType<typeof toneForMeal> }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return <PhotoTile tone={tone} label={alt.toLowerCase()} aspect="16 / 10" round={0} />;
+  }
+  return (
+    <img
+      src={`/media/meals/${mealId}/thumb.jpg`}
+      alt={alt}
+      loading="lazy"
+      className="w-full aspect-[16/10] object-cover block"
+      onError={() => setFailed(true)}
+    />
   );
 }

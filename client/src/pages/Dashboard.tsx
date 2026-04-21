@@ -170,12 +170,21 @@ export default function Dashboard() {
       {tonight && (
         <article className="grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] bg-surface-1 rounded-[20px] border border-line overflow-hidden shadow-[var(--shadow-hero)]">
           <div className="min-h-[200px] lg:min-h-[320px]">
-            <PhotoTile
-              tone={toneForMeal(tonight.meal)}
-              label={`tonight — ${tonight.meal.name.toLowerCase()}`}
-              aspect={null}
-              round={0}
-            />
+            {tonight.meal.imagePath ? (
+              <img
+                src={`/media/meals/${tonight.meal.id}/thumb.jpg`}
+                alt={tonight.meal.name}
+                className="w-full h-full object-cover"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+              />
+            ) : (
+              <PhotoTile
+                tone={toneForMeal(tonight.meal)}
+                label={`tonight — ${tonight.meal.name.toLowerCase()}`}
+                aspect={null}
+                round={0}
+              />
+            )}
           </div>
           <div className="p-6 sm:p-9 flex flex-col gap-4 justify-center">
             <div className="flex gap-1.5 flex-wrap">
@@ -246,8 +255,17 @@ export default function Dashboard() {
                     onClick={() => navigate(`/recipes/${pm.meal.id}`)}
                     className="flex items-center gap-3.5 p-3.5 bg-surface-1 border border-line rounded-[14px] text-left transition hover:shadow-[var(--shadow-card-hover)]"
                   >
-                    <div className="w-[64px] sm:w-[72px] flex-shrink-0">
-                      <PhotoTile tone={toneForMeal(pm.meal)} aspect="1 / 1" round={10} compact />
+                    <div className="w-[64px] sm:w-[72px] flex-shrink-0 aspect-square rounded-[10px] overflow-hidden">
+                      {pm.meal.imagePath ? (
+                        <img
+                          src={`/media/meals/${pm.meal.id}/thumb.jpg`}
+                          alt={pm.meal.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                        />
+                      ) : (
+                        <PhotoTile tone={toneForMeal(pm.meal)} aspect="1 / 1" round={10} compact />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-[11px] uppercase tracking-[0.08em] text-ink-3 mb-0.5">{pm.mealSlot}</div>
