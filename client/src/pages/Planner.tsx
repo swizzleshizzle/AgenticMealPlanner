@@ -7,14 +7,19 @@ import {
   Leaf,
   Plus,
   Check,
+  Search,
+  X,
 } from "lucide-react";
 import {
+  addPlannedMeal,
   createPlan,
   generatePlan,
   getPlans,
   updatePlan,
   type WeeklyPlan,
+  type PlannedMeal,
 } from "../api/plans";
+import { getMeals, type Meal } from "../api/meals";
 import { syncCalendar } from "../api/calendar";
 import Pill from "../components/ui/Pill";
 import Button from "../components/ui/Button";
@@ -80,8 +85,13 @@ function planNotPast(plan: WeeklyPlan): boolean {
   return end.getTime() > Date.now();
 }
 
+type Slot = "lunch" | "dinner";
+type DayKey = typeof DAYS[number];
+
 export default function Planner() {
   const [plan, setPlan] = useState<WeeklyPlan | null>(null);
+  const [meals, setMeals] = useState<Meal[]>([]);
+  const [picker, setPicker] = useState<{ day: DayKey; slot: Slot } | null>(null);
   const [generating, setGenerating] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const navigate = useNavigate();
@@ -100,7 +110,22 @@ export default function Planner() {
                   ?? null;
       setPlan(active);
     });
+    getMeals().then(setMeals).catch(() => setMeals([]));
   }, []);
+
+  const handlePick = async (mealId: number) => {
+    if (!plan || !picker) return;
+    const meal = meals.find((m) => m.id === mealId);
+    const planned = await addPlannedMeal(plan.id, {
+      mealId,
+      day: picker.day,
+      mealSlot: picker.slot,
+      servings: meal?.servings ?? 2,
+      isPrep: meal?.mealType === "batch_prep",
+    });
+    setPlan({ ...plan, plannedMeals: [...plan.plannedMeals, planned as PlannedMeal] });
+    setPicker(null);
+  };
 
   const handleNew = async () => {
     const next = await createPlan(getNextMonday());
@@ -260,7 +285,10 @@ export default function Planner() {
                             </div>
                           </button>
                         ) : (
-                          <button className="flex items-center justify-center gap-1.5 border border-dashed border-line rounded-[10px] py-4 text-[11.5px] text-ink-3 hover:bg-surface-2 transition">
+                          <button
+                            onClick={() => setPicker({ day, slot })}
+                            className="flex items-center justify-center gap-1.5 border border-dashed border-line rounded-[10px] py-4 text-[11.5px] text-ink-3 hover:bg-surface-2 hover:border-line transition"
+                          >
                             <Plus size={12} /> Add
                           </button>
                         )}
@@ -292,6 +320,146 @@ export default function Planner() {
           )}
         </>
       )}
+
+      {picker && (
+        <MealPickerModal
+          day={picker.day}
+          slot={picker.slot}
+          meals={meals}
+          onPick={handlePick}
+          onClose={() => setPicker(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function MealPickerModal({
+  day, slot, meals, onPick, onClose,
+}: {
+  day: DayKey;
+  slot: Slot;
+  meals: Meal[];
+  onPick: (mealId: number) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [busyId, setBusyId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return meals;
+    return meals.filter((m) =>
+      m.name.toLowerCase().includes(q) ||
+      m.tags.some((t) => t.toLowerCase().includes(q))
+    );
+  }, [meals, query]);
+
+  const slotLabel = slot === "lunch" ? "lunch" : "dinner";
+  const dayLabel = DAY_LABELS[day];
+
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-8 amp-fade-in"
+      style={{ background: "rgba(30, 22, 10, 0.55)", backdropFilter: "blur(4px)" }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-surface-1 rounded-[16px] w-full max-w-[640px] max-h-[80vh] flex flex-col overflow-hidden border border-line"
+        style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
+      >
+        <div className="flex items-center gap-3 px-4 sm:px-5 py-3.5 border-b border-line-soft">
+          <div className="w-8 h-8 rounded-[8px] bg-accent-soft text-accent-ink grid place-items-center">
+            <Plus size={16} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[13.5px] font-semibold text-ink-1">Add a recipe</div>
+            <div className="text-[11px] text-ink-3">For {dayLabel} {slotLabel}</div>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="w-8 h-8 grid place-items-center rounded-[8px] text-ink-2 hover:bg-surface-2"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="px-4 sm:px-5 py-3 border-b border-line-soft">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3 pointer-events-none" />
+            <input
+              autoFocus
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search recipes…"
+              className="w-full pl-9 pr-3 py-2 text-[13.5px] bg-surface-2 border border-line rounded-[10px] text-ink-1 placeholder:text-ink-3 focus:outline-none focus:border-accent"
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-2 sm:p-3">
+          {filtered.length === 0 ? (
+            <div className="p-8 text-center text-[13px] text-ink-3">No recipes match.</div>
+          ) : (
+            <ul className="flex flex-col gap-1.5">
+              {filtered.map((m) => {
+                const tone = toneForMeal(m);
+                const isPrep = m.mealType === "batch_prep";
+                const busy = busyId === m.id;
+                return (
+                  <li key={m.id}>
+                    <button
+                      disabled={busy || busyId !== null}
+                      onClick={async () => {
+                        setBusyId(m.id);
+                        try { await onPick(m.id); } catch (e: any) { alert(e.message); }
+                        finally { setBusyId(null); }
+                      }}
+                      className="w-full flex items-center gap-3 p-2 rounded-[10px] text-left hover:bg-surface-2 disabled:opacity-60 disabled:cursor-wait transition border border-transparent hover:border-line-soft"
+                    >
+                      <div className="w-12 h-12 rounded-[8px] overflow-hidden flex-shrink-0">
+                        {m.imagePath ? (
+                          <img
+                            src={`/media/meals/${m.id}/thumb.jpg`}
+                            alt={m.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                          />
+                        ) : (
+                          <PhotoTile tone={tone} aspect="1 / 1" round={8} compact />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13.5px] font-semibold text-ink-1 leading-tight truncate">{m.name}</div>
+                        <div className="flex items-center gap-1 mt-0.5 text-[11px] text-ink-3">
+                          {isPrep ? <Flame size={10} /> : <Leaf size={10} />}
+                          {isPrep ? "Batch prep" : "Cook fresh"}
+                          {m.calories && <><span>·</span><span>{m.calories} cal</span></>}
+                        </div>
+                      </div>
+                      {busy && <div className="text-[11px] text-ink-3">Adding…</div>}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
