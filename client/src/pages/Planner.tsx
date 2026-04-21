@@ -71,6 +71,15 @@ function planCoversToday(plan: WeeklyPlan): boolean {
   return now >= start.getTime() && now < end.getTime();
 }
 
+function planNotPast(plan: WeeklyPlan): boolean {
+  // Plan is current or upcoming (end-of-week is after now). Past plans hide.
+  const start = localMidnightFromISO(plan.weekStartDate);
+  if (Number.isNaN(start.getTime())) return false;
+  const end = new Date(start);
+  end.setDate(end.getDate() + 7);
+  return end.getTime() > Date.now();
+}
+
 export default function Planner() {
   const [plan, setPlan] = useState<WeeklyPlan | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -79,13 +88,15 @@ export default function Planner() {
 
   useEffect(() => {
     getPlans().then((p) => {
-      // Prefer a plan that covers today; only fall back to a non-covering draft
-      // (so the user can edit a plan they've started for next week). Stale
-      // active plans are intentionally ignored — the user gets the New plan CTA.
-      const covering = p.filter(planCoversToday);
-      const active = covering.find((pl) => pl.status === "active")
-                  ?? covering.find((pl) => pl.status === "draft")
-                  ?? p.find((pl) => pl.status === "draft")
+      // Show the most relevant non-past plan: prefer one that covers today,
+      // otherwise the soonest upcoming. Past plans hide so the user gets the
+      // New plan CTA instead of a stale board.
+      const candidates = p.filter(planNotPast)
+        .sort((a, b) => a.weekStartDate.localeCompare(b.weekStartDate));
+      const covering = candidates.filter(planCoversToday);
+      const active = covering.find((pl) => pl.status === "draft")
+                  ?? covering[0]
+                  ?? candidates[0]
                   ?? null;
       setPlan(active);
     });
@@ -221,8 +232,17 @@ export default function Planner() {
                                 : "bg-surface-2 border-line-soft hover:border-line"
                             }`}
                           >
-                            <div className="mb-1.5">
-                              <PhotoTile tone={toneForMeal(pm.meal)} aspect="16 / 9" round={6} compact />
+                            <div className="mb-1.5 aspect-[16/9] rounded-[6px] overflow-hidden">
+                              {pm.meal.imagePath ? (
+                                <img
+                                  src={`/media/meals/${pm.meal.id}/thumb.jpg`}
+                                  alt={pm.meal.name}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                                />
+                              ) : (
+                                <PhotoTile tone={toneForMeal(pm.meal)} aspect="16 / 9" round={6} compact />
+                              )}
                             </div>
                             <div className="text-[12.5px] font-semibold text-ink-1 leading-tight line-clamp-2">
                               {pm.meal.name}
