@@ -55,6 +55,18 @@ router.post("/:id/pdf", uploadPdfOnly.single("file"), async (req, res, next) => 
   } catch (e) { next(e); }
 });
 
+router.post("/:id/extract-thumbnail", async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const force = req.query.force === "true";
+    const meal = await mealService.extractMealThumbnail(id, force);
+    res.json(meal);
+  } catch (e: any) {
+    if (e.status) return res.status(e.status).json({ error: e.message });
+    next(e);
+  }
+});
+
 router.post("/import", upload.single("file"), async (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: "No file uploaded" });

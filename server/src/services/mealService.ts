@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { copyFile, unlink } from "fs/promises";
+import path from "path";
 import { ensureMealDir, mealThumbPath, mealPdfPath, relStoragePath } from "./mediaStorage.js";
 import { runThumbnailJob } from "./pdfExtraction.js";
 
@@ -142,6 +143,23 @@ export async function uploadMealPdf(mealId: number, tmpPath: string) {
         imageSource: source,
       }),
     },
+    include: mealWithIngredients,
+  });
+}
+
+export async function extractMealThumbnail(mealId: number, force = false) {
+  const meal = await prisma.meal.findUnique({ where: { id: mealId } });
+  if (!meal) throw Object.assign(new Error("meal not found"), { status: 404 });
+  if (!meal.pdfPath) throw Object.assign(new Error("no PDF for this meal"), { status: 409 });
+  if (meal.imageSource === "manual" && !force) {
+    throw Object.assign(new Error("photo is manual; pass force=true to overwrite"), { status: 409 });
+  }
+  const pdfAbs = path.resolve(process.cwd(), meal.pdfPath);
+  const thumbAbs = mealThumbPath(mealId);
+  const source = await runThumbnailJob(pdfAbs, thumbAbs);
+  return prisma.meal.update({
+    where: { id: mealId },
+    data: { imagePath: source ? relStoragePath(thumbAbs) : null, imageSource: source },
     include: mealWithIngredients,
   });
 }
