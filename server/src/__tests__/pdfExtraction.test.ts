@@ -36,4 +36,16 @@ describe("pdfExtraction.parseImagesList", () => {
   it("returns empty array on empty output", () => {
     expect(parseImagesList("")).toEqual([]);
   });
+
+  it("parseImagesList drops smask rows", () => {
+    const raw = [
+      "page   num  type   width height color comp bpc  enc interp  object ID x-ppi y-ppi size ratio",
+      "--------------------------------------------------------------------------------------------",
+      "   1     0 image     800   600  rgb     3   8  jpeg   no        13  0    96    96  55K  12%",
+      "   1     1 smask     800   600  gray    1   8  image  no        13  0    96    96  34K   2%",
+    ].join("\n");
+    const rows = parseImagesList(raw);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].width).toBe(800);
+  });
 });

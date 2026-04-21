@@ -35,6 +35,7 @@ export function parseImagesList(raw: string): ImageRow[] {
     const cols = lines[i].trim().split(/\s+/);
     // Columns: page num type width height color comp bpc enc interp object ID x-ppi y-ppi size ratio
     if (cols.length < 14) continue;
+    if (cols[2] !== "image") continue;
     const page = Number(cols[0]);
     const width = Number(cols[3]);
     const height = Number(cols[4]);
@@ -91,40 +92,43 @@ export async function runThumbnailJob(
     if (pick) {
       // Extract only page `pick.page`, writing JPEG-native where possible.
       const tmpPrefix = path.join(os.tmpdir(), `amp-img-${Date.now()}`);
-      await execFileAsync("pdfimages", [
-        "-j",                  // write JPEG where the PDF stream is already JPEG (no re-encode)
-        "-f", String(pick.page),
-        "-l", String(pick.page),
-        pdfPath,
-        tmpPrefix,
-      ], { timeout: 30_000 });
+      const tmpDir = path.dirname(tmpPrefix);
+      const tmpBase = path.basename(tmpPrefix);
+      let produced: string[] = [];
+      try {
+        await execFileAsync("pdfimages", [
+          "-j",                  // write JPEG where the PDF stream is already JPEG (no re-encode)
+          "-f", String(pick.page),
+          "-l", String(pick.page),
+          pdfPath,
+          tmpPrefix,
+        ], { timeout: 30_000 });
 
-      // pdfimages will produce files like tmpPrefix-000.jpg, tmpPrefix-001.ppm, etc.
-      // Pick the largest .jpg (or convert the largest .ppm via pdftoppm -jpeg fallback).
-      const candidates = (await readdir(path.dirname(tmpPrefix)))
-        .filter((f) => f.startsWith(path.basename(tmpPrefix)));
-      let chosen: { file: string; size: number } | null = null;
-      for (const f of candidates) {
-        const abs = path.join(path.dirname(tmpPrefix), f);
-        const st = await stat(abs);
-        if (!chosen || st.size > chosen.size) chosen = { file: abs, size: st.size };
-      }
-      if (chosen && chosen.file.endsWith(".jpg")) {
-        await rename(chosen.file, destJpgPath);
-        // cleanup other candidates
-        for (const f of candidates) {
-          const abs = path.join(path.dirname(tmpPrefix), f);
-          try { await unlink(abs); } catch { /* may already be moved */ }
+        // pdfimages will produce files like tmpPrefix-000.jpg, tmpPrefix-001.ppm, etc.
+        // Pick the largest .jpg (or convert the largest .ppm via pdftoppm -jpeg fallback).
+        produced = (await readdir(tmpDir)).filter((f) => f.startsWith(tmpBase));
+        let chosen: { file: string; size: number } | null = null;
+        for (const f of produced) {
+          const abs = path.join(tmpDir, f);
+          const st = await stat(abs);
+          if (!chosen || st.size > chosen.size) chosen = { file: abs, size: st.size };
         }
-        return "embedded";
-      }
-      // Not a jpg — clean up and fall through to rasterization
-      for (const f of candidates) {
-        try { await unlink(path.join(path.dirname(tmpPrefix), f)); } catch {}
+        if (chosen && chosen.file.endsWith(".jpg")) {
+          await rename(chosen.file, destJpgPath);
+          // Remove the chosen file from `produced` so the finally block doesn't try to delete it.
+          produced = produced.filter((f) => path.join(tmpDir, f) !== chosen!.file);
+          return "embedded";
+        }
+        // Not a jpg → fall through to Tier 2
+      } finally {
+        for (const f of produced) {
+          try { await unlink(path.join(tmpDir, f)); } catch { /* already gone */ }
+        }
       }
     }
   } catch (e) {
-    // Fall through to rasterization
+    // Log and fall through to Tier 2.
+    console.warn(`[pdfExtraction] Tier 1 (pdfimages) failed for ${pdfPath}:`, (e as Error).message);
   }
 
   // Tier 2: pdftoppm — rasterize page 1 to JPEG at 120 dpi.
@@ -132,16 +136,17 @@ export async function runThumbnailJob(
     const tmpPrefix = path.join(os.tmpdir(), `amp-page-${Date.now()}`);
     await execFileAsync("pdftoppm", [
       "-jpeg",
+      "-singlefile",
       "-r", "120",
-      "-f", "1", "-l", "1",
       pdfPath,
       tmpPrefix,
     ], { timeout: 60_000 });
-    // pdftoppm outputs tmpPrefix-1.jpg
-    const out = `${tmpPrefix}-1.jpg`;
+    // -singlefile emits `{tmpPrefix}.jpg` exactly.
+    const out = `${tmpPrefix}.jpg`;
     await rename(out, destJpgPath);
     return "rasterized";
-  } catch {
+  } catch (e) {
+    console.warn(`[pdfExtraction] Tier 2 (pdftoppm) failed for ${pdfPath}:`, (e as Error).message);
     return null;
   }
 }
