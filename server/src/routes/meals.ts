@@ -1,6 +1,6 @@
 import { Router } from "express";
 import * as mealService from "../services/mealService.js";
-import { upload, uploadImage } from "../middleware/upload.js";
+import { upload, uploadImage, uploadPdfOnly } from "../middleware/upload.js";
 import { parseRecipeFromFile } from "../claude/recipeParser.js";
 import { PrismaClient } from "@prisma/client";
 
@@ -42,6 +42,15 @@ router.post("/:id/photo", uploadImage.single("file"), async (req, res, next) => 
     const id = Number(req.params.id);
     if (!req.file) return res.status(400).json({ error: "missing file" });
     const meal = await mealService.replaceMealPhoto(id, req.file.path);
+    res.json(meal);
+  } catch (e) { next(e); }
+});
+
+router.post("/:id/pdf", uploadPdfOnly.single("file"), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!req.file) return res.status(400).json({ error: "missing file" });
+    const meal = await mealService.uploadMealPdf(id, req.file.path);
     res.json(meal);
   } catch (e) { next(e); }
 });

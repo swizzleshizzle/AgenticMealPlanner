@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { copyFile, unlink } from "fs/promises";
-import { ensureMealDir, mealThumbPath, relStoragePath } from "./mediaStorage.js";
+import { ensureMealDir, mealThumbPath, mealPdfPath, relStoragePath } from "./mediaStorage.js";
+import { runThumbnailJob } from "./pdfExtraction.js";
 
 const prisma = new PrismaClient();
 
@@ -114,6 +115,33 @@ export async function replaceMealPhoto(mealId: number, tmpPath: string) {
   return prisma.meal.update({
     where: { id: mealId },
     data: { imagePath: relStoragePath(dest), imageSource: "manual" },
+    include: mealWithIngredients,
+  });
+}
+
+export async function uploadMealPdf(mealId: number, tmpPath: string) {
+  await ensureMealDir(mealId);
+  const destPdf = mealPdfPath(mealId);
+  await copyFile(tmpPath, destPdf);
+  try { await unlink(tmpPath); } catch {}
+
+  const meal = await prisma.meal.findUnique({ where: { id: mealId } });
+  const keepManual = meal?.imageSource === "manual";
+
+  let source: "embedded" | "rasterized" | null = null;
+  if (!keepManual) {
+    source = await runThumbnailJob(destPdf, mealThumbPath(mealId));
+  }
+
+  return prisma.meal.update({
+    where: { id: mealId },
+    data: {
+      pdfPath: relStoragePath(destPdf),
+      ...(keepManual ? {} : {
+        imagePath: source ? relStoragePath(mealThumbPath(mealId)) : null,
+        imageSource: source,
+      }),
+    },
     include: mealWithIngredients,
   });
 }
