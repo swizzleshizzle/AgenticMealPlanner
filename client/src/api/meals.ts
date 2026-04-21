@@ -20,6 +20,8 @@ export interface Meal {
   name: string;
   description: string | null;
   source: string;
+  canBatch: boolean;
+  canFresh: boolean;
   mealType: string;
   servings: number;
   prepTime: number | null;
