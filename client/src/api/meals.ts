@@ -45,7 +45,13 @@ export const updateMeal = (id: number, data: any) =>
 export const deleteMeal = (id: number) =>
   apiFetch<void>(`/meals/${id}`, { method: "DELETE" });
 
-export async function importRecipe(file: File) {
+export interface ImportRecipeResult {
+  parsed: any;
+  ingredientMap: Record<string, number>;
+  importSessionId: string;
+}
+
+export async function importRecipe(file: File): Promise<ImportRecipeResult> {
   const form = new FormData();
   form.append("file", file);
   const res = await fetch("/api/meals/import", { method: "POST", body: form });

@@ -9,6 +9,7 @@ export default function RecipeImport() {
   const [stage, setStage] = useState<"upload" | "parsing" | "review" | "error">("upload");
   const [parsed, setParsed] = useState<any>(null);
   const [ingredientMap, setIngredientMap] = useState<Record<string, number>>({});
+  const [importSessionId, setImportSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -21,6 +22,7 @@ export default function RecipeImport() {
       const result = await importRecipe(file);
       setParsed(result.parsed);
       setIngredientMap(result.ingredientMap);
+      setImportSessionId(result.importSessionId);
       setStage("review");
     } catch (e: any) {
       setError(e?.message ?? "Import failed");
@@ -32,6 +34,7 @@ export default function RecipeImport() {
     const data = {
       ...formData,
       source: "hello_fresh",
+      importSessionId,
       ingredients: formData.ingredients?.map((ing: any) => ({
         ingredientId: ingredientMap[ing.name],
         quantity: ing.quantity,

@@ -2,6 +2,7 @@ import { Router } from "express";
 import * as mealService from "../services/mealService.js";
 import { upload, uploadImage, uploadPdfOnly } from "../middleware/upload.js";
 import { parseRecipeFromFile } from "../claude/recipeParser.js";
+import { stashImportPdf, popImportPdf } from "../services/importSessions.js";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -23,7 +24,21 @@ router.get("/:id", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const meal = await mealService.createMeal(req.body);
+  const { importSessionId, ...mealData } = req.body;
+  const meal = await mealService.createMeal(mealData);
+
+  if (importSessionId) {
+    const tmpPdf = popImportPdf(importSessionId);
+    if (tmpPdf) {
+      // Fire-and-forget so the client gets an immediate response.
+      // The thumb will appear a moment later; the detail page's <img onError>
+      // fallback covers the interim.
+      mealService.uploadMealPdf(meal.id, tmpPdf).catch((err) =>
+        console.error("[import→create] uploadMealPdf failed", meal.id, err)
+      );
+    }
+  }
+
   res.status(201).json(meal);
 });
 
@@ -90,9 +105,12 @@ router.post("/import", upload.single("file"), async (req, res) => {
       ingredientMap.set(ing.name, ingredient.id);
     }
 
+    const importSessionId = stashImportPdf(req.file.path);
+
     res.json({
       parsed,
       ingredientMap: Object.fromEntries(ingredientMap),
+      importSessionId,
     });
   } catch (err: any) {
     res.status(500).json({ error: "Failed to parse recipe", details: err.message });
