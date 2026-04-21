@@ -27,13 +27,29 @@ const DAY_LABELS: Record<string, string> = {
   thursday: "Thu", friday: "Fri", saturday: "Sat", sunday: "Sun",
 };
 
+function localMidnightFromISO(s: string): Date {
+  // Accepts both "YYYY-MM-DD" and full ISO ("YYYY-MM-DDTHH:mm:ss.sssZ"); always
+  // returns local midnight on the calendar date — preserves the date the user
+  // chose regardless of their timezone offset.
+  return new Date(s.slice(0, 10) + "T00:00:00");
+}
+
+function formatLocalDate(d: Date): string {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 function getNextMonday(): string {
+  // Returns the upcoming Monday on-or-after today, formatted as YYYY-MM-DD in
+  // local time. Called on a Monday → returns today.
   const now = new Date();
   const day = now.getDay();
-  const diff = day === 0 ? 1 : 8 - day;
+  const diff = (8 - day) % 7;
   const monday = new Date(now);
   monday.setDate(now.getDate() + diff);
-  return monday.toISOString().split("T")[0];
+  return formatLocalDate(monday);
 }
 
 function todayKey(): string {
@@ -41,9 +57,18 @@ function todayKey(): string {
 }
 
 function dayDate(weekStart: string, dayKey: string): number {
-  const start = new Date(weekStart + "T00:00:00");
+  const start = localMidnightFromISO(weekStart);
   start.setDate(start.getDate() + DAYS.indexOf(dayKey as typeof DAYS[number]));
   return start.getDate();
+}
+
+function planCoversToday(plan: WeeklyPlan): boolean {
+  const start = localMidnightFromISO(plan.weekStartDate);
+  if (Number.isNaN(start.getTime())) return false;
+  const end = new Date(start);
+  end.setDate(end.getDate() + 7);
+  const now = Date.now();
+  return now >= start.getTime() && now < end.getTime();
 }
 
 export default function Planner() {
@@ -54,7 +79,14 @@ export default function Planner() {
 
   useEffect(() => {
     getPlans().then((p) => {
-      const active = p.find((pl) => pl.status === "active") ?? p.find((pl) => pl.status === "draft") ?? p[0] ?? null;
+      // Prefer a plan that covers today; only fall back to a non-covering draft
+      // (so the user can edit a plan they've started for next week). Stale
+      // active plans are intentionally ignored — the user gets the New plan CTA.
+      const covering = p.filter(planCoversToday);
+      const active = covering.find((pl) => pl.status === "active")
+                  ?? covering.find((pl) => pl.status === "draft")
+                  ?? p.find((pl) => pl.status === "draft")
+                  ?? null;
       setPlan(active);
     });
   }, []);
@@ -88,7 +120,7 @@ export default function Planner() {
   const today = todayKey();
 
   const weekStart = plan?.weekStartDate ?? getNextMonday();
-  const startObj = new Date(weekStart + "T00:00:00");
+  const startObj = localMidnightFromISO(weekStart);
   const monthLabel = startObj.toLocaleDateString(undefined, { month: "long", day: "numeric" });
 
   const summary = useMemo(() => {
