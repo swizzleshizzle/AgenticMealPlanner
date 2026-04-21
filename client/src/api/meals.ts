@@ -36,6 +36,7 @@ export interface Meal {
   fatG: number | null;
   fiberG: number | null;
   sodiumMg: number | null;
+  updatedAt?: string;
   ingredients: MealIngredient[];
 }
 
