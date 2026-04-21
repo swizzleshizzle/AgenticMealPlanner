@@ -9,13 +9,19 @@ import {
   Check,
   Search,
   X,
+  Trash2,
+  Replace,
+  Minus,
+  ExternalLink,
 } from "lucide-react";
 import {
   addPlannedMeal,
   createPlan,
   generatePlan,
   getPlans,
+  removePlannedMeal,
   updatePlan,
+  updatePlannedMeal,
   type WeeklyPlan,
   type PlannedMeal,
 } from "../api/plans";
@@ -87,11 +93,15 @@ function planNotPast(plan: WeeklyPlan): boolean {
 
 type Slot = "lunch" | "dinner";
 type DayKey = typeof DAYS[number];
+type PickerCtx =
+  | { mode: "add"; day: DayKey; slot: Slot }
+  | { mode: "swap"; day: DayKey; slot: Slot; plannedId: number };
 
 export default function Planner() {
   const [plan, setPlan] = useState<WeeklyPlan | null>(null);
   const [meals, setMeals] = useState<Meal[]>([]);
-  const [picker, setPicker] = useState<{ day: DayKey; slot: Slot } | null>(null);
+  const [picker, setPicker] = useState<PickerCtx | null>(null);
+  const [editing, setEditing] = useState<PlannedMeal | null>(null);
   const [generating, setGenerating] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const navigate = useNavigate();
@@ -116,15 +126,41 @@ export default function Planner() {
   const handlePick = async (mealId: number) => {
     if (!plan || !picker) return;
     const meal = meals.find((m) => m.id === mealId);
-    const planned = await addPlannedMeal(plan.id, {
-      mealId,
-      day: picker.day,
-      mealSlot: picker.slot,
-      servings: meal?.servings ?? 2,
-      isPrep: meal?.mealType === "batch_prep",
-    });
-    setPlan({ ...plan, plannedMeals: [...plan.plannedMeals, planned as PlannedMeal] });
+    if (picker.mode === "add") {
+      const planned = await addPlannedMeal(plan.id, {
+        mealId,
+        day: picker.day,
+        mealSlot: picker.slot,
+        servings: meal?.servings ?? 2,
+        isPrep: meal?.mealType === "batch_prep",
+      });
+      setPlan({ ...plan, plannedMeals: [...plan.plannedMeals, planned as PlannedMeal] });
+    } else {
+      const updated = await updatePlannedMeal(plan.id, picker.plannedId, { mealId });
+      setPlan({
+        ...plan,
+        plannedMeals: plan.plannedMeals.map((pm) => (pm.id === updated.id ? updated : pm)),
+      });
+      if (editing?.id === updated.id) setEditing(updated);
+    }
     setPicker(null);
+  };
+
+  const updatePm = async (pm: PlannedMeal, patch: Partial<PlannedMeal>) => {
+    if (!plan) return;
+    const updated = await updatePlannedMeal(plan.id, pm.id, patch);
+    setPlan({
+      ...plan,
+      plannedMeals: plan.plannedMeals.map((p) => (p.id === updated.id ? updated : p)),
+    });
+    if (editing?.id === updated.id) setEditing(updated);
+  };
+
+  const removePm = async (pm: PlannedMeal) => {
+    if (!plan) return;
+    await removePlannedMeal(plan.id, pm.id);
+    setPlan({ ...plan, plannedMeals: plan.plannedMeals.filter((p) => p.id !== pm.id) });
+    if (editing?.id === pm.id) setEditing(null);
   };
 
   const handleNew = async () => {
@@ -250,10 +286,12 @@ export default function Planner() {
                         <div className="text-[10px] uppercase tracking-[0.08em] text-ink-3">{slot}</div>
                         {pm ? (
                           <button
-                            onClick={() => navigate(`/recipes/${pm.meal.id}`)}
+                            onClick={() => setEditing(pm)}
                             className={`block text-left rounded-[10px] p-2 transition border ${
                               pm.status === "cooked"
                                 ? "bg-accent-soft border-accent-line"
+                                : pm.status === "skipped"
+                                ? "bg-surface-2 border-line-soft opacity-60"
                                 : "bg-surface-2 border-line-soft hover:border-line"
                             }`}
                           >
@@ -282,11 +320,17 @@ export default function Planner() {
                                   <span className="text-accent-ink font-semibold">Cooked</span>
                                 </>
                               )}
+                              {pm.status === "skipped" && (
+                                <>
+                                  <span>·</span>
+                                  <span className="text-ink-3 font-semibold">Skipped</span>
+                                </>
+                              )}
                             </div>
                           </button>
                         ) : (
                           <button
-                            onClick={() => setPicker({ day, slot })}
+                            onClick={() => setPicker({ mode: "add", day, slot })}
                             className="flex items-center justify-center gap-1.5 border border-dashed border-line rounded-[10px] py-4 text-[11.5px] text-ink-3 hover:bg-surface-2 hover:border-line transition"
                           >
                             <Plus size={12} /> Add
@@ -325,9 +369,21 @@ export default function Planner() {
         <MealPickerModal
           day={picker.day}
           slot={picker.slot}
+          mode={picker.mode}
           meals={meals}
           onPick={handlePick}
           onClose={() => setPicker(null)}
+        />
+      )}
+
+      {editing && (
+        <PlannedMealEditModal
+          pm={editing}
+          onChange={(patch) => updatePm(editing, patch)}
+          onSwap={() => setPicker({ mode: "swap", day: editing.day as DayKey, slot: editing.mealSlot as Slot, plannedId: editing.id })}
+          onRemove={() => removePm(editing)}
+          onOpenRecipe={() => navigate(`/recipes/${editing.meal.id}`)}
+          onClose={() => setEditing(null)}
         />
       )}
     </div>
@@ -335,10 +391,11 @@ export default function Planner() {
 }
 
 function MealPickerModal({
-  day, slot, meals, onPick, onClose,
+  day, slot, mode, meals, onPick, onClose,
 }: {
   day: DayKey;
   slot: Slot;
+  mode: "add" | "swap";
   meals: Meal[];
   onPick: (mealId: number) => Promise<void>;
   onClose: () => void;
@@ -382,10 +439,12 @@ function MealPickerModal({
       >
         <div className="flex items-center gap-3 px-4 sm:px-5 py-3.5 border-b border-line-soft">
           <div className="w-8 h-8 rounded-[8px] bg-accent-soft text-accent-ink grid place-items-center">
-            <Plus size={16} />
+            {mode === "swap" ? <Replace size={16} /> : <Plus size={16} />}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[13.5px] font-semibold text-ink-1">Add a recipe</div>
+            <div className="text-[13.5px] font-semibold text-ink-1">
+              {mode === "swap" ? "Swap recipe" : "Add a recipe"}
+            </div>
             <div className="text-[11px] text-ink-3">For {dayLabel} {slotLabel}</div>
           </div>
           <button
@@ -460,6 +519,242 @@ function MealPickerModal({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function PlannedMealEditModal({
+  pm, onChange, onSwap, onRemove, onOpenRecipe, onClose,
+}: {
+  pm: PlannedMeal;
+  onChange: (patch: Partial<PlannedMeal>) => Promise<void>;
+  onSwap: () => void;
+  onRemove: () => Promise<void>;
+  onOpenRecipe: () => void;
+  onClose: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  const guarded = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    try { await fn(); } catch (e: any) { alert(e.message); }
+    finally { setBusy(false); }
+  };
+
+  const statuses: Array<{ value: string; label: string }> = [
+    { value: "planned", label: "Planned" },
+    { value: "cooked", label: "Cooked" },
+    { value: "skipped", label: "Skipped" },
+  ];
+
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-8 amp-fade-in"
+      style={{ background: "rgba(30, 22, 10, 0.55)", backdropFilter: "blur(4px)" }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-surface-1 rounded-[16px] w-full max-w-[520px] max-h-[88vh] flex flex-col overflow-hidden border border-line"
+        style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
+      >
+        <div className="flex items-start gap-3 px-4 sm:px-5 py-3.5 border-b border-line-soft">
+          <div className="w-12 h-12 rounded-[8px] overflow-hidden flex-shrink-0">
+            {pm.meal.imagePath ? (
+              <img
+                src={`/media/meals/${pm.meal.id}/thumb.jpg`}
+                alt={pm.meal.name}
+                className="w-full h-full object-cover"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+              />
+            ) : (
+              <PhotoTile tone={toneForMeal(pm.meal)} aspect="1 / 1" round={8} compact />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[14px] font-semibold text-ink-1 leading-tight line-clamp-2">{pm.meal.name}</div>
+            <button
+              onClick={onOpenRecipe}
+              className="inline-flex items-center gap-1 mt-1 text-[11.5px] text-accent-ink hover:underline"
+            >
+              <ExternalLink size={11} /> Open recipe
+            </button>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="w-8 h-8 grid place-items-center rounded-[8px] text-ink-2 hover:bg-surface-2"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 flex flex-col gap-5">
+          <Field label="Status">
+            <div className="flex gap-1.5 flex-wrap">
+              {statuses.map((s) => {
+                const active = pm.status === s.value;
+                return (
+                  <button
+                    key={s.value}
+                    disabled={busy || active}
+                    onClick={() => guarded(() => onChange({ status: s.value }))}
+                    className={`px-3 py-1.5 rounded-[8px] text-[12.5px] border transition ${
+                      active
+                        ? "bg-accent text-accent-on border-accent"
+                        : "bg-surface-2 text-ink-1 border-line hover:border-accent-line"
+                    } disabled:opacity-60 disabled:cursor-not-allowed`}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+
+          <Field label="Day">
+            <select
+              value={pm.day}
+              disabled={busy}
+              onChange={(e) => guarded(() => onChange({ day: e.target.value }))}
+              className="w-full px-3 py-2 text-[13px] bg-surface-2 border border-line rounded-[8px] text-ink-1 focus:outline-none focus:border-accent disabled:opacity-60"
+            >
+              {DAYS.map((d) => (
+                <option key={d} value={d}>{DAY_LABELS[d]}</option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Slot">
+            <div className="flex gap-1.5">
+              {(["lunch", "dinner"] as const).map((s) => {
+                const active = pm.mealSlot === s;
+                return (
+                  <button
+                    key={s}
+                    disabled={busy || active}
+                    onClick={() => guarded(() => onChange({ mealSlot: s }))}
+                    className={`px-3 py-1.5 rounded-[8px] text-[12.5px] capitalize border transition ${
+                      active
+                        ? "bg-accent text-accent-on border-accent"
+                        : "bg-surface-2 text-ink-1 border-line hover:border-accent-line"
+                    } disabled:opacity-60 disabled:cursor-not-allowed`}
+                  >
+                    {s}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+
+          <Field label="Servings">
+            <div className="flex items-center gap-2">
+              <button
+                disabled={busy || pm.servings <= 1}
+                onClick={() => guarded(() => onChange({ servings: pm.servings - 1 }))}
+                className="w-9 h-9 grid place-items-center rounded-[8px] bg-surface-2 border border-line text-ink-1 hover:border-accent-line disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Decrease servings"
+              >
+                <Minus size={14} />
+              </button>
+              <div className="text-[16px] font-semibold text-ink-1 tabular-nums w-10 text-center">{pm.servings}</div>
+              <button
+                disabled={busy || pm.servings >= 12}
+                onClick={() => guarded(() => onChange({ servings: pm.servings + 1 }))}
+                className="w-9 h-9 grid place-items-center rounded-[8px] bg-surface-2 border border-line text-ink-1 hover:border-accent-line disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Increase servings"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+          </Field>
+
+          <Field label="Cook style">
+            <div className="flex gap-1.5">
+              {([
+                { value: false, label: "Cook fresh", Icon: Leaf },
+                { value: true,  label: "Batch prep", Icon: Flame },
+              ] as const).map(({ value, label, Icon }) => {
+                const active = pm.isPrep === value;
+                return (
+                  <button
+                    key={String(value)}
+                    disabled={busy || active}
+                    onClick={() => guarded(() => onChange({ isPrep: value }))}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[12.5px] border transition ${
+                      active
+                        ? "bg-accent text-accent-on border-accent"
+                        : "bg-surface-2 text-ink-1 border-line hover:border-accent-line"
+                    } disabled:opacity-60 disabled:cursor-not-allowed`}
+                  >
+                    <Icon size={12} /> {label}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+
+          <Field label="Recipe">
+            <Button variant="ghost" size="sm" icon={Replace} disabled={busy} onClick={onSwap}>
+              Swap to a different recipe
+            </Button>
+          </Field>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 px-4 sm:px-5 py-3 border-t border-line-soft bg-surface-2">
+          {confirmingRemove ? (
+            <>
+              <span className="text-[12px] text-ink-2">Remove from plan?</span>
+              <div className="flex gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setConfirmingRemove(false)}>Cancel</Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  icon={Trash2}
+                  disabled={busy}
+                  onClick={() => guarded(onRemove)}
+                >
+                  Remove
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={Trash2}
+                disabled={busy}
+                onClick={() => setConfirmingRemove(true)}
+              >
+                Remove
+              </Button>
+              <Button variant="primary" size="sm" onClick={onClose}>Done</Button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="text-[11px] uppercase tracking-[0.08em] text-ink-3 font-semibold">{label}</div>
+      {children}
     </div>
   );
 }
