@@ -27,6 +27,9 @@ export interface Meal {
   tags: string[];
   instructions: string;
   imageUrl: string | null;
+  pdfPath: string | null;
+  imagePath: string | null;
+  imageSource: "embedded" | "rasterized" | "manual" | null;
   calories: number | null;
   proteinG: number | null;
   carbsG: number | null;
@@ -56,5 +59,28 @@ export async function importRecipe(file: File): Promise<ImportRecipeResult> {
   form.append("file", file);
   const res = await fetch("/api/meals/import", { method: "POST", body: form });
   if (!res.ok) throw new Error("Import failed");
+  return res.json();
+}
+
+export async function uploadMealPhoto(id: number, file: File): Promise<Meal> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`/api/meals/${id}/photo`, { method: "POST", body: form });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "upload failed");
+  return res.json();
+}
+
+export async function uploadMealPdf(id: number, file: File): Promise<Meal> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`/api/meals/${id}/pdf`, { method: "POST", body: form });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "upload failed");
+  return res.json();
+}
+
+export async function extractMealThumbnail(id: number, force = false): Promise<Meal> {
+  const q = force ? "?force=true" : "";
+  const res = await fetch(`/api/meals/${id}/extract-thumbnail${q}`, { method: "POST" });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "extraction failed");
   return res.json();
 }
