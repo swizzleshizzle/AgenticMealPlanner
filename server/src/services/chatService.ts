@@ -7,7 +7,7 @@ const prisma = new PrismaClient();
 
 export async function handleChatMessage(message: string): Promise<ChatResponse & { applied: boolean[] }> {
   const meals = await prisma.meal.findMany({
-    select: { id: true, name: true, tags: true, mealType: true },
+    select: { id: true, name: true, tags: true, canBatch: true, canFresh: true },
   });
   const pantryItems = await prisma.pantryItem.findMany({
     include: { ingredient: true },
