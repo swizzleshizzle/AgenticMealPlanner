@@ -7,11 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum MealType {
-  batch_prep
-  cook_fresh
-}
-
 enum MealSource {
   hello_fresh
   manual
@@ -70,7 +65,8 @@ model Meal {
   description String?
   source      MealSource @default(manual)
   sourceUrl   String?    @map("source_url")
-  mealType    MealType   @map("meal_type")
+  canBatch    Boolean    @default(false) @map("can_batch")
+  canFresh    Boolean    @default(true)  @map("can_fresh")
   servings    Int        @default(2)
   prepTime    Int?       @map("prep_time")
   cookTime    Int?       @map("cook_time")

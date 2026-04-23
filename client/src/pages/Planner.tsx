@@ -127,12 +127,13 @@ export default function Planner() {
     if (!plan || !picker) return;
     const meal = meals.find((m) => m.id === mealId);
     if (picker.mode === "add") {
+      const canBatchHere = picker.day === "sunday" && !!meal?.canBatch;
       const planned = await addPlannedMeal(plan.id, {
         mealId,
         day: picker.day,
         mealSlot: picker.slot,
         servings: meal?.servings ?? 2,
-        isPrep: meal?.mealType === "batch_prep",
+        isPrep: canBatchHere,
       });
       setPlan({ ...plan, plannedMeals: [...plan.plannedMeals, planned as PlannedMeal] });
     } else {
@@ -477,7 +478,6 @@ function MealPickerModal({
             <ul className="flex flex-col gap-1.5">
               {filtered.map((m) => {
                 const tone = toneForMeal(m);
-                const isPrep = m.mealType === "batch_prep";
                 const busy = busyId === m.id;
                 return (
                   <li key={m.id}>
@@ -504,9 +504,13 @@ function MealPickerModal({
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-[13.5px] font-semibold text-ink-1 leading-tight truncate">{m.name}</div>
-                        <div className="flex items-center gap-1 mt-0.5 text-[11px] text-ink-3">
-                          {isPrep ? <Flame size={10} /> : <Leaf size={10} />}
-                          {isPrep ? "Batch prep" : "Cook fresh"}
+                        <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-ink-3 flex-wrap">
+                          {m.canBatch && (
+                            <span className="inline-flex items-center gap-1"><Flame size={10} /> Batch</span>
+                          )}
+                          {m.canFresh && (
+                            <span className="inline-flex items-center gap-1"><Leaf size={10} /> Fresh</span>
+                          )}
                           {m.calories && <><span>·</span><span>{m.calories} cal</span></>}
                         </div>
                       </div>

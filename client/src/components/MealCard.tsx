@@ -14,7 +14,6 @@ interface Props {
 }
 
 export default function MealCard({ meal, photos = true, compact = false, to }: Props) {
-  const isPrep = meal.mealType === "batch_prep";
   const tone = toneForMeal(meal);
   const totalTime = (meal.prepTime || 0) + (meal.cookTime || 0);
 
@@ -32,10 +31,18 @@ export default function MealCard({ meal, photos = true, compact = false, to }: P
       )}
       <div className={`flex flex-col gap-2 ${compact ? "p-3.5" : "p-4"}`}>
         <div className="flex items-center gap-1.5 flex-wrap">
-          <Pill tone={isPrep ? "prep" : "fresh"} size="sm">
-            {isPrep ? <Flame size={11} /> : <Leaf size={11} />}
-            {isPrep ? "Batch Prep" : "Cook Fresh"}
-          </Pill>
+          {meal.canBatch && (
+            <Pill tone="prep" size="sm">
+              <Flame size={11} />
+              Batch Prep
+            </Pill>
+          )}
+          {meal.canFresh && (
+            <Pill tone="fresh" size="sm">
+              <Leaf size={11} />
+              Cook Fresh
+            </Pill>
+          )}
           {!photos && meal.tags.slice(0, 1).map((t) => (
             <Pill key={t} size="sm" tone="ghost">{t}</Pill>
           ))}

@@ -26,7 +26,7 @@ const TONE_ORDER: PhotoToneName[] = [
  * Deterministically pick a warm tone for a meal so the same recipe always
  * gets the same placeholder colour even though `photoTone` isn't on the API.
  */
-export function toneForMeal(input: { id?: number; name?: string; mealType?: string }): PhotoToneName {
+export function toneForMeal(input: { id?: number; name?: string }): PhotoToneName {
   if (input.id != null) {
     return TONE_ORDER[input.id % TONE_ORDER.length];
   }
