@@ -19,6 +19,9 @@ import {
   createPlan,
   generatePlan,
   getPlans,
+  getNextMonday,
+  localMidnightFromISO,
+  pickRelevantPlan,
   removePlannedMeal,
   updatePlan,
   updatePlannedMeal,
@@ -38,31 +41,6 @@ const DAY_LABELS: Record<string, string> = {
   thursday: "Thu", friday: "Fri", saturday: "Sat", sunday: "Sun",
 };
 
-function localMidnightFromISO(s: string): Date {
-  // Accepts both "YYYY-MM-DD" and full ISO ("YYYY-MM-DDTHH:mm:ss.sssZ"); always
-  // returns local midnight on the calendar date — preserves the date the user
-  // chose regardless of their timezone offset.
-  return new Date(s.slice(0, 10) + "T00:00:00");
-}
-
-function formatLocalDate(d: Date): string {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function getNextMonday(): string {
-  // Returns the upcoming Monday on-or-after today, formatted as YYYY-MM-DD in
-  // local time. Called on a Monday → returns today.
-  const now = new Date();
-  const day = now.getDay();
-  const diff = (8 - day) % 7;
-  const monday = new Date(now);
-  monday.setDate(now.getDate() + diff);
-  return formatLocalDate(monday);
-}
-
 function todayKey(): string {
   return DAYS[(new Date().getDay() + 6) % 7];
 }
@@ -71,24 +49,6 @@ function dayDate(weekStart: string, dayKey: string): number {
   const start = localMidnightFromISO(weekStart);
   start.setDate(start.getDate() + DAYS.indexOf(dayKey as typeof DAYS[number]));
   return start.getDate();
-}
-
-function planCoversToday(plan: WeeklyPlan): boolean {
-  const start = localMidnightFromISO(plan.weekStartDate);
-  if (Number.isNaN(start.getTime())) return false;
-  const end = new Date(start);
-  end.setDate(end.getDate() + 7);
-  const now = Date.now();
-  return now >= start.getTime() && now < end.getTime();
-}
-
-function planNotPast(plan: WeeklyPlan): boolean {
-  // Plan is current or upcoming (end-of-week is after now). Past plans hide.
-  const start = localMidnightFromISO(plan.weekStartDate);
-  if (Number.isNaN(start.getTime())) return false;
-  const end = new Date(start);
-  end.setDate(end.getDate() + 7);
-  return end.getTime() > Date.now();
 }
 
 type Slot = "lunch" | "dinner";
@@ -107,19 +67,7 @@ export default function Planner() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    getPlans().then((p) => {
-      // Show the most relevant non-past plan: prefer one that covers today,
-      // otherwise the soonest upcoming. Past plans hide so the user gets the
-      // New plan CTA instead of a stale board.
-      const candidates = p.filter(planNotPast)
-        .sort((a, b) => a.weekStartDate.localeCompare(b.weekStartDate));
-      const covering = candidates.filter(planCoversToday);
-      const active = covering.find((pl) => pl.status === "draft")
-                  ?? covering[0]
-                  ?? candidates[0]
-                  ?? null;
-      setPlan(active);
-    });
+    getPlans().then((p) => setPlan(pickRelevantPlan(p)));
     getMeals().then(setMeals).catch(() => setMeals([]));
   }, []);
 
