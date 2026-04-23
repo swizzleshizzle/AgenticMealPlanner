@@ -1,7 +1,7 @@
 import { callClaude } from "./cli.js";
 
 interface ChatContext {
-  meals: { id: number; name: string; tags: string[]; mealType: string }[];
+  meals: { id: number; name: string; tags: string[]; canBatch: boolean; canFresh: boolean }[];
   pantry: { name: string; quantity: number; unit: string }[];
   currentPlan: {
     id: number;

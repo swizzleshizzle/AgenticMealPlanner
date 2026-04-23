@@ -44,7 +44,6 @@ export default function RecipeDetail() {
     return <div className="text-ink-3 text-[14px]">Loading recipe…</div>;
   }
 
-  const isPrep = meal.mealType === "batch_prep";
   const tone = toneForMeal(meal);
   const instructions = parseInstructions(meal.instructions);
   const hasNutrition = meal.calories != null;
@@ -79,10 +78,18 @@ export default function RecipeDetail() {
         )}
         <div className="flex flex-col gap-3.5">
           <div className="flex gap-1.5 flex-wrap">
-            <Pill tone={isPrep ? "prep" : "fresh"} size="md">
-              {isPrep ? <Flame size={12} /> : <Leaf size={12} />}
-              {isPrep ? "Batch Prep" : "Cook Fresh"}
-            </Pill>
+            {meal.canBatch && (
+              <Pill tone="prep" size="md">
+                <Flame size={12} />
+                Batch Prep
+              </Pill>
+            )}
+            {meal.canFresh && (
+              <Pill tone="fresh" size="md">
+                <Leaf size={12} />
+                Cook Fresh
+              </Pill>
+            )}
             {meal.tags.map((t) => <Pill key={t} size="md" tone="ghost">{t}</Pill>)}
           </div>
           <h1 className="text-[28px] sm:text-[34px] font-semibold -tracking-[0.025em] text-ink-1 leading-[1.1]">

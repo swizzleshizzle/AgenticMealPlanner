@@ -8,3 +8,4 @@ calendar-tokens.json
 .design-cache/
 .claude/settings.local.json
 server/storage/
+.worktrees/

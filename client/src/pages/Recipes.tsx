@@ -7,8 +7,8 @@ import Button from "../components/ui/Button";
 
 const FILTERS = [
   { k: "all", label: "All", icon: null as null | typeof Flame },
-  { k: "batch_prep", label: "Batch Prep", icon: Flame },
-  { k: "cook_fresh", label: "Cook Fresh", icon: Leaf },
+  { k: "canBatch", label: "Batch-able", icon: Flame },
+  { k: "canFresh", label: "Fresh-able", icon: Leaf },
 ] as const;
 
 export default function Recipes() {
@@ -27,7 +27,8 @@ export default function Recipes() {
   }, [meals]);
 
   const filtered = meals.filter((m) => {
-    if (filter !== "all" && m.mealType !== filter) return false;
+    if (filter === "canBatch" && !m.canBatch) return false;
+    if (filter === "canFresh" && !m.canFresh) return false;
     if (tag && !m.tags.includes(tag)) return false;
     const s = search.toLowerCase().trim();
     if (s && !m.name.toLowerCase().includes(s) && !m.tags.some((t) => t.toLowerCase().includes(s))) return false;

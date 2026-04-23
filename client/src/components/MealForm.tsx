@@ -15,7 +15,7 @@ const LABEL = "text-[11px] uppercase tracking-[0.08em] text-ink-3 font-semibold 
 export default function MealForm({ initialData, onSubmit, submitLabel = "Save" }: Props) {
   const [form, setForm] = useState(
     initialData || {
-      name: "", description: "", mealType: "cook_fresh", servings: 2,
+      name: "", description: "", canBatch: false, canFresh: true, servings: 2,
       prepTime: null, cookTime: null, tags: [], instructions: [],
       calories: null, proteinG: null, carbsG: null, fatG: null, ingredients: [],
     },
@@ -35,11 +35,25 @@ export default function MealForm({ initialData, onSubmit, submitLabel = "Save" }
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className={LABEL}>Meal Type</label>
-          <select value={form.mealType} onChange={(e) => update("mealType", e.target.value)} className={FIELD}>
-            <option value="cook_fresh">Cook Fresh</option>
-            <option value="batch_prep">Batch Prep</option>
-          </select>
+          <label className={LABEL}>Cook Styles</label>
+          <div className="flex flex-col gap-1.5 pt-1">
+            <label className="inline-flex items-center gap-2 text-[13.5px] text-ink-1">
+              <input
+                type="checkbox"
+                checked={!!form.canFresh}
+                onChange={(e) => update("canFresh", e.target.checked)}
+              />
+              Cook Fresh
+            </label>
+            <label className="inline-flex items-center gap-2 text-[13.5px] text-ink-1">
+              <input
+                type="checkbox"
+                checked={!!form.canBatch}
+                onChange={(e) => update("canBatch", e.target.checked)}
+              />
+              Batch Prep
+            </label>
+          </div>
         </div>
         <div>
           <label className={LABEL}>Servings</label>

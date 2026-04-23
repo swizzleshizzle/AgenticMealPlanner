@@ -4,7 +4,6 @@ import path from "path";
 interface ParsedRecipe {
   name: string;
   description: string;
-  mealType: "batch_prep" | "cook_fresh";
   servings: number;
   prepTime: number | null;
   cookTime: number | null;
@@ -39,7 +38,6 @@ Extract all recipe information and return ONLY valid JSON matching this exact sc
 {
   "name": "string",
   "description": "string (1-2 sentence summary)",
-  "mealType": "cook_fresh",
   "servings": number,
   "prepTime": number_or_null (minutes),
   "cookTime": number_or_null (minutes),
