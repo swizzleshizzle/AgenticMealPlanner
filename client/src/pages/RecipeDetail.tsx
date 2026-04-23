@@ -7,7 +7,6 @@ import {
   Leaf,
   Users,
   CalendarPlus,
-  Replace,
   FileText,
   Trash2,
   Camera,
@@ -15,10 +14,18 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { deleteMeal, getMeal, uploadMealPhoto, uploadMealPdf, extractMealThumbnail, type Meal } from "../api/meals";
+import AddToPlanModal from "../components/AddToPlanModal";
+import { useToast } from "../components/ui/ToastProvider";
+import type { PlannedMeal } from "../api/plans";
 import Pill from "../components/ui/Pill";
 import PhotoTile from "../components/ui/PhotoTile";
 import Button from "../components/ui/Button";
 import { toneForMeal } from "../theme/photoTone";
+
+const DAY_LONG: Record<string, string> = {
+  monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday",
+  thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday",
+};
 
 function parseInstructions(raw: unknown): string[] {
   if (!raw) return [];
@@ -37,6 +44,8 @@ export default function RecipeDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [meal, setMeal] = useState<Meal | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const toast = useToast();
 
   useEffect(() => { getMeal(Number(id)).then(setMeal).catch(() => setMeal(null)); }, [id]);
 
@@ -119,8 +128,9 @@ export default function RecipeDetail() {
             </div>
           )}
           <div className="flex gap-2 mt-2 flex-wrap">
-            <Button variant="primary" icon={CalendarPlus}>Add to plan</Button>
-            <Button variant="ghost" icon={Replace}>Scale servings</Button>
+            <Button variant="primary" icon={CalendarPlus} onClick={() => setAddOpen(true)}>
+              Add to plan
+            </Button>
             {hasPdf && (
               <Button
                 variant="ghost"
@@ -176,6 +186,19 @@ export default function RecipeDetail() {
           )}
         </div>
       </div>
+
+      {addOpen && (
+        <AddToPlanModal
+          meal={meal}
+          onClose={() => setAddOpen(false)}
+          onAdded={(pm: PlannedMeal) => {
+            toast({
+              message: `Added to ${DAY_LONG[pm.day] ?? pm.day} ${pm.mealSlot}`,
+              action: { label: "View plan", onClick: () => navigate("/planner") },
+            });
+          }}
+        />
+      )}
     </div>
   );
 }
