@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Refrigerator, BookMarked, Snowflake } from "lucide-react";
+import { Plus, Refrigerator, BookMarked, Snowflake, Receipt as ReceiptIcon } from "lucide-react";
 import {
   addPantryItem,
   deletePantryItem,
@@ -9,6 +9,9 @@ import {
 import { getIngredients, type Ingredient } from "../api/ingredients";
 import Pill from "../components/ui/Pill";
 import Button from "../components/ui/Button";
+import AddFromReceiptModal from "../components/AddFromReceiptModal";
+import SpendingStrip from "../components/SpendingStrip";
+import RecentReceiptsStrip from "../components/RecentReceiptsStrip";
 
 const LOCATIONS = ["fridge", "freezer", "pantry"] as const;
 const LOC_TITLES: Record<string, string> = { fridge: "Fridge", freezer: "Freezer", pantry: "Pantry" };
@@ -42,6 +45,8 @@ export default function Pantry() {
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [newItem, setNewItem] = useState({ ingredientId: 0, quantity: 1, unit: "", location: "pantry" });
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptRefreshKey, setReceiptRefreshKey] = useState(0);
 
   const load = () => {
     getPantry().then(setItems).catch(() => setItems([]));
@@ -76,10 +81,18 @@ export default function Pantry() {
           </div>
           <h1 className="text-[26px] sm:text-[30px] font-semibold -tracking-[0.02em] text-ink-1">Pantry</h1>
         </div>
-        <Button variant="primary" icon={Plus} onClick={() => setShowAdd((v) => !v)}>
-          Add item
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="ghost" icon={ReceiptIcon} onClick={() => setShowReceiptModal(true)}>
+            Add from receipt
+          </Button>
+          <Button variant="primary" icon={Plus} onClick={() => setShowAdd((v) => !v)}>
+            Add item
+          </Button>
+        </div>
       </div>
+
+      <SpendingStrip refreshKey={receiptRefreshKey} />
+      <RecentReceiptsStrip refreshKey={receiptRefreshKey} />
 
       {showAdd && (
         <div className="bg-surface-1 border border-line rounded-[14px] p-4 flex gap-3 items-end flex-wrap amp-fade-in">
@@ -150,6 +163,16 @@ export default function Pantry() {
           );
         })}
       </div>
+
+      {showReceiptModal && (
+        <AddFromReceiptModal
+          onClose={() => setShowReceiptModal(false)}
+          onCommitted={() => {
+            setReceiptRefreshKey((k) => k + 1);
+            load(); // refresh pantry items so newly-added pantry rows appear
+          }}
+        />
+      )}
     </div>
   );
 }
