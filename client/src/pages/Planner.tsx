@@ -281,7 +281,7 @@ export default function Planner() {
             weekLabel={monthLabel}
             onCreate={handleNew}
           />
-          <EmptyWeekGrid weekStart={weekStart} today={isViewingToday ? today : null} />
+          <EmptyWeekGrid weekStart={weekStart} today={today} />
         </>
       ) : (
         <>
@@ -820,7 +820,7 @@ function EmptyWeekCard({
 
 function EmptyWeekGrid({ weekStart, today }: { weekStart: string; today: string | null }) {
   return (
-    <div className="lg:grid lg:grid-cols-7 lg:gap-3 flex gap-3 overflow-x-auto amp-no-scrollbar -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0 snap-x snap-mandatory opacity-60">
+    <div aria-hidden="true" className="lg:grid lg:grid-cols-7 lg:gap-3 flex gap-3 overflow-x-auto amp-no-scrollbar -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0 snap-x snap-mandatory opacity-60">
       {DAYS.map((day) => {
         const isToday = day === today;
         return (
