@@ -19,6 +19,7 @@ import {
 import {
   addPlannedMeal,
   createPlan,
+  formatLocalDate,
   generatePlan,
   getPlans,
   localMidnightFromISO,
@@ -54,12 +55,9 @@ function dayDate(weekStart: string, dayKey: string): number {
 }
 
 function stepWeek(weekStart: string, deltaDays: number): string {
-  const d = new Date(weekStart + "T00:00:00");
+  const d = localMidnightFromISO(weekStart);
   d.setDate(d.getDate() + deltaDays);
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+  return formatLocalDate(d);
 }
 
 type Slot = "lunch" | "dinner";

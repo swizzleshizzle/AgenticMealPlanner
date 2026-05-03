@@ -47,7 +47,7 @@ export function localMidnightFromISO(s: string): Date {
   return new Date(s.slice(0, 10) + "T00:00:00");
 }
 
-function formatLocalDate(d: Date): string {
+export function formatLocalDate(d: Date): string {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
