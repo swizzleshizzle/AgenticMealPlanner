@@ -103,6 +103,7 @@ export default function Planner() {
 
   const todayWeek = useMemo(() => parseWeekParam(null), []);
   const isViewingToday = viewedWeek === todayWeek;
+  const isPastWeek = viewedWeek < todayWeek;
 
   const goPrevWeek = () => setSearchParams({ week: stepWeek(viewedWeek, -7) });
   const goNextWeek = () => setSearchParams({ week: stepWeek(viewedWeek, +7) });
@@ -193,7 +194,7 @@ export default function Planner() {
     try { await syncCalendar(viewedPlan.id); } finally { setSyncing(false); }
   };
 
-  const today = todayKey();
+  const today = isViewingToday ? todayKey() : null;
 
   const weekStart = viewedWeek;
   const startObj = localMidnightFromISO(weekStart);
@@ -257,9 +258,6 @@ export default function Planner() {
               {viewedPlan.status === "active" ? "Active plan" : viewedPlan.status === "draft" ? "Draft" : viewedPlan.status}
             </Pill>
           )}
-          {!viewedPlan && (
-            <Button variant="primary" icon={Plus} onClick={handleNew}>New plan</Button>
-          )}
           {viewedPlan?.status === "draft" && (
             <>
               <Button variant="ghost" icon={Sparkles} onClick={handleGenerate} disabled={generating}>
@@ -277,9 +275,14 @@ export default function Planner() {
       </div>
 
       {!viewedPlan ? (
-        <div className="rounded-[16px] border border-dashed border-line bg-surface-1 p-10 text-center text-ink-2">
-          No active plan yet. Start one for next week.
-        </div>
+        <>
+          <EmptyWeekCard
+            isPastWeek={isPastWeek}
+            weekLabel={monthLabel}
+            onCreate={handleNew}
+          />
+          <EmptyWeekGrid weekStart={weekStart} today={isViewingToday ? today : null} />
+        </>
       ) : (
         <>
           {/* mobile: horizontal scrollable strip; desktop: 7-col grid */}
@@ -785,6 +788,67 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div className="flex flex-col gap-1.5">
       <div className="text-[11px] uppercase tracking-[0.08em] text-ink-3 font-semibold">{label}</div>
       {children}
+    </div>
+  );
+}
+
+function EmptyWeekCard({
+  isPastWeek,
+  weekLabel,
+  onCreate,
+}: {
+  isPastWeek: boolean;
+  weekLabel: string;
+  onCreate: () => void;
+}) {
+  if (isPastWeek) {
+    return (
+      <div className="rounded-[16px] border border-dashed border-line bg-surface-1 p-8 text-center">
+        <div className="text-[14px] text-ink-2">No plan recorded for this week.</div>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-[16px] border border-dashed border-line bg-surface-1 p-8 text-center flex flex-col items-center gap-3">
+      <div className="text-[14px] text-ink-2">No plan for this week yet.</div>
+      <Button variant="primary" icon={Plus} onClick={onCreate}>
+        Create plan for the week of {weekLabel}
+      </Button>
+    </div>
+  );
+}
+
+function EmptyWeekGrid({ weekStart, today }: { weekStart: string; today: string | null }) {
+  return (
+    <div className="lg:grid lg:grid-cols-7 lg:gap-3 flex gap-3 overflow-x-auto amp-no-scrollbar -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0 snap-x snap-mandatory opacity-60">
+      {DAYS.map((day) => {
+        const isToday = day === today;
+        return (
+          <div
+            key={day}
+            className={`snap-start shrink-0 w-[72%] sm:w-[44%] lg:w-auto bg-surface-1 rounded-[14px] p-3 flex flex-col gap-2.5 min-h-[280px] border ${
+              isToday ? "border-accent" : "border-line-soft"
+            }`}
+          >
+            <div className="flex items-baseline justify-between">
+              <div>
+                <div className={`text-[11px] uppercase tracking-[0.08em] font-semibold ${isToday ? "text-accent-ink" : "text-ink-3"}`}>
+                  {DAY_LABELS[day]}
+                </div>
+                <div className="text-[20px] font-semibold text-ink-3 -tracking-[0.02em] mt-px">
+                  {dayDate(weekStart, day)}
+                </div>
+              </div>
+            </div>
+            {(["lunch", "dinner"] as const).map((slot) => (
+              <div key={slot} className="flex flex-col gap-1">
+                <div className="text-[10px] uppercase tracking-[0.08em] text-ink-3">{slot}</div>
+                <div className="border border-dashed border-line-soft rounded-[10px] py-4 bg-surface-2/40" />
+              </div>
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }
