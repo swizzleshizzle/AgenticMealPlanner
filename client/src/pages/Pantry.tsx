@@ -92,7 +92,10 @@ export default function Pantry() {
       </div>
 
       <SpendingStrip refreshKey={receiptRefreshKey} />
-      <RecentReceiptsStrip refreshKey={receiptRefreshKey} />
+      <RecentReceiptsStrip
+        refreshKey={receiptRefreshKey}
+        onChanged={() => setReceiptRefreshKey((k) => k + 1)}
+      />
 
       {showAdd && (
         <div className="bg-surface-1 border border-line rounded-[14px] p-4 flex gap-3 items-end flex-wrap amp-fade-in">
