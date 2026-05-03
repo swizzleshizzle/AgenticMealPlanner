@@ -312,3 +312,52 @@ export async function commitReceipt(input: CommitInput) {
   popReceiptParse(input.parseId);
   return result;
 }
+
+// ---------------------------------------------------------------------------
+// Read queries.
+// ---------------------------------------------------------------------------
+
+export async function getRecentReceipts(limit = 5) {
+  return prisma.receipt.findMany({
+    orderBy: { tripDate: "desc" },
+    take: limit,
+    include: {
+      _count: { select: { items: true } },
+    },
+  });
+}
+
+export async function getReceiptById(id: number) {
+  return prisma.receipt.findUnique({
+    where: { id },
+    include: {
+      items: {
+        orderBy: { id: "asc" },
+        include: { ingredient: true },
+      },
+    },
+  });
+}
+
+export async function deleteReceipt(id: number) {
+  // Cascade deletes the receipt_items via the FK; PantryItems are untouched
+  // because there's no FK back from PantryItem.
+  return prisma.receipt.delete({ where: { id } });
+}
+
+export async function getWeeklySpending(reference: Date = new Date()) {
+  const { weekStart, weekEnd } = weeklyWindow(reference);
+  const result = await prisma.receipt.aggregate({
+    where: {
+      tripDate: { gte: weekStart, lte: weekEnd },
+    },
+    _sum: { total: true },
+    _count: { _all: true },
+  });
+  return {
+    weekStart: weekStart.toISOString().slice(0, 10),
+    weekEnd: weekEnd.toISOString().slice(0, 10),
+    total: Number(result._sum.total ?? 0),
+    tripCount: result._count._all,
+  };
+}
