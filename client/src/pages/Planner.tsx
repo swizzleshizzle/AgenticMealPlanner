@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Sparkles,
   CalendarDays,
@@ -19,9 +19,9 @@ import {
   createPlan,
   generatePlan,
   getPlans,
-  getNextMonday,
   localMidnightFromISO,
-  pickRelevantPlan,
+  parseWeekParam,
+  pickPlanForWeek,
   removePlannedMeal,
   updatePlan,
   updatePlannedMeal,
@@ -58,98 +58,137 @@ type PickerCtx =
   | { mode: "swap"; day: DayKey; slot: Slot; plannedId: number };
 
 export default function Planner() {
-  const [plan, setPlan] = useState<WeeklyPlan | null>(null);
+  const [plans, setPlans] = useState<WeeklyPlan[]>([]);
   const [meals, setMeals] = useState<Meal[]>([]);
   const [picker, setPicker] = useState<PickerCtx | null>(null);
   const [editing, setEditing] = useState<PlannedMeal | null>(null);
   const [generating, setGenerating] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // The viewed week is the URL's source of truth. parseWeekParam normalizes
+  // anything weird (mid-week dates, garbage strings, missing param) to the
+  // Monday of the relevant calendar week.
+  const rawWeekParam = searchParams.get("week");
+  const viewedWeek = parseWeekParam(rawWeekParam);
+
+  // If the URL was missing or non-canonical, replace it (don't push) so the
+  // user's browser history doesn't get cluttered with redirects on first
+  // load.
+  useEffect(() => {
+    if (rawWeekParam !== viewedWeek) {
+      setSearchParams({ week: viewedWeek }, { replace: true });
+    }
+  }, [rawWeekParam, viewedWeek, setSearchParams]);
 
   useEffect(() => {
-    getPlans().then((p) => setPlan(pickRelevantPlan(p)));
+    getPlans().then(setPlans).catch(() => setPlans([]));
     getMeals().then(setMeals).catch(() => setMeals([]));
   }, []);
 
+  const viewedPlan = useMemo(
+    () => pickPlanForWeek(plans, viewedWeek),
+    [plans, viewedWeek],
+  );
+
   const handlePick = async (mealId: number) => {
-    if (!plan || !picker) return;
+    if (!viewedPlan || !picker) return;
     const meal = meals.find((m) => m.id === mealId);
     if (picker.mode === "add") {
       const canBatchHere = picker.day === "sunday" && !!meal?.canBatch;
-      const planned = await addPlannedMeal(plan.id, {
+      const planned = await addPlannedMeal(viewedPlan.id, {
         mealId,
         day: picker.day,
         mealSlot: picker.slot,
         servings: meal?.servings ?? 2,
         isPrep: canBatchHere,
       });
-      setPlan({ ...plan, plannedMeals: [...plan.plannedMeals, planned as PlannedMeal] });
+      setPlans((prev) =>
+        prev.map((p) =>
+          p.id === viewedPlan.id
+            ? { ...p, plannedMeals: [...p.plannedMeals, planned as PlannedMeal] }
+            : p,
+        ),
+      );
     } else {
-      const updated = await updatePlannedMeal(plan.id, picker.plannedId, { mealId });
-      setPlan({
-        ...plan,
-        plannedMeals: plan.plannedMeals.map((pm) => (pm.id === updated.id ? updated : pm)),
-      });
+      const updated = await updatePlannedMeal(viewedPlan.id, picker.plannedId, { mealId });
+      setPlans((prev) =>
+        prev.map((p) =>
+          p.id === viewedPlan.id
+            ? { ...p, plannedMeals: p.plannedMeals.map((pm) => (pm.id === updated.id ? updated : pm)) }
+            : p,
+        ),
+      );
       if (editing?.id === updated.id) setEditing(updated);
     }
     setPicker(null);
   };
 
   const updatePm = async (pm: PlannedMeal, patch: Partial<PlannedMeal>) => {
-    if (!plan) return;
-    const updated = await updatePlannedMeal(plan.id, pm.id, patch);
-    setPlan({
-      ...plan,
-      plannedMeals: plan.plannedMeals.map((p) => (p.id === updated.id ? updated : p)),
-    });
+    if (!viewedPlan) return;
+    const updated = await updatePlannedMeal(viewedPlan.id, pm.id, patch);
+    setPlans((prev) =>
+      prev.map((p) =>
+        p.id === viewedPlan.id
+          ? { ...p, plannedMeals: p.plannedMeals.map((x) => (x.id === updated.id ? updated : x)) }
+          : p,
+      ),
+    );
     if (editing?.id === updated.id) setEditing(updated);
   };
 
   const removePm = async (pm: PlannedMeal) => {
-    if (!plan) return;
-    await removePlannedMeal(plan.id, pm.id);
-    setPlan({ ...plan, plannedMeals: plan.plannedMeals.filter((p) => p.id !== pm.id) });
+    if (!viewedPlan) return;
+    await removePlannedMeal(viewedPlan.id, pm.id);
+    setPlans((prev) =>
+      prev.map((p) =>
+        p.id === viewedPlan.id
+          ? { ...p, plannedMeals: p.plannedMeals.filter((x) => x.id !== pm.id) }
+          : p,
+      ),
+    );
     if (editing?.id === pm.id) setEditing(null);
   };
 
   const handleNew = async () => {
-    const next = await createPlan(getNextMonday());
-    setPlan(next);
+    const next = await createPlan(viewedWeek);
+    setPlans((prev) => [...prev, next]);
   };
 
   const handleGenerate = async () => {
-    if (!plan) return;
+    if (!viewedPlan) return;
     setGenerating(true);
     try {
-      const updated = await generatePlan(plan.id);
-      setPlan(updated);
+      const updated = await generatePlan(viewedPlan.id);
+      setPlans((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
     } finally { setGenerating(false); }
   };
 
   const handleActivate = async () => {
-    if (!plan) return;
-    const updated = await updatePlan(plan.id, { status: "active" });
-    setPlan(updated);
+    if (!viewedPlan) return;
+    const updated = await updatePlan(viewedPlan.id, { status: "active" });
+    setPlans((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
   };
 
   const handleSync = async () => {
-    if (!plan) return;
+    if (!viewedPlan) return;
     setSyncing(true);
-    try { await syncCalendar(plan.id); } finally { setSyncing(false); }
+    try { await syncCalendar(viewedPlan.id); } finally { setSyncing(false); }
   };
 
   const today = todayKey();
 
-  const weekStart = plan?.weekStartDate ?? getNextMonday();
+  const weekStart = viewedWeek;
   const startObj = localMidnightFromISO(weekStart);
   const monthLabel = startObj.toLocaleDateString(undefined, { month: "long", day: "numeric" });
 
   const summary = useMemo(() => {
-    if (!plan) return null;
-    const prep = plan.plannedMeals.filter((m) => m.isPrep && m.status !== "skipped").length;
-    const fresh = plan.plannedMeals.filter((m) => !m.isPrep && m.status !== "skipped").length;
+    if (!viewedPlan) return null;
+    const prep = viewedPlan.plannedMeals.filter((m) => m.isPrep && m.status !== "skipped").length;
+    const fresh = viewedPlan.plannedMeals.filter((m) => !m.isPrep && m.status !== "skipped").length;
     let totalProtein = 0, count = 0;
-    for (const pm of plan.plannedMeals) {
+    for (const pm of viewedPlan.plannedMeals) {
       if (pm.status === "skipped") continue;
       const scale = pm.servings / (pm.meal.servings || 1);
       if (pm.meal.proteinG) {
@@ -159,7 +198,7 @@ export default function Planner() {
     }
     const avgProtein = count > 0 ? Math.round(totalProtein / count) : 0;
     return { prep, fresh, avgProtein };
-  }, [plan]);
+  }, [viewedPlan]);
 
   return (
     <div className="flex flex-col gap-7">
@@ -173,16 +212,16 @@ export default function Planner() {
           </h1>
         </div>
         <div className="flex gap-2.5 items-center flex-wrap">
-          {plan && (
-            <Pill tone={plan.status === "active" ? "accent" : plan.status === "draft" ? "warn" : "neutral"} size="md">
-              {plan.status === "active" ? <Check size={11} /> : null}
-              {plan.status === "active" ? "Active plan" : plan.status === "draft" ? "Draft" : plan.status}
+          {viewedPlan && (
+            <Pill tone={viewedPlan.status === "active" ? "accent" : viewedPlan.status === "draft" ? "warn" : "neutral"} size="md">
+              {viewedPlan.status === "active" ? <Check size={11} /> : null}
+              {viewedPlan.status === "active" ? "Active plan" : viewedPlan.status === "draft" ? "Draft" : viewedPlan.status}
             </Pill>
           )}
-          {!plan && (
+          {!viewedPlan && (
             <Button variant="primary" icon={Plus} onClick={handleNew}>New plan</Button>
           )}
-          {plan?.status === "draft" && (
+          {viewedPlan?.status === "draft" && (
             <>
               <Button variant="ghost" icon={Sparkles} onClick={handleGenerate} disabled={generating}>
                 {generating ? "Generating…" : "Auto-generate"}
@@ -190,7 +229,7 @@ export default function Planner() {
               <Button variant="primary" onClick={handleActivate}>Confirm plan</Button>
             </>
           )}
-          {plan?.status === "active" && (
+          {viewedPlan?.status === "active" && (
             <Button variant="primary" icon={CalendarDays} onClick={handleSync} disabled={syncing}>
               {syncing ? "Syncing…" : "Sync to Calendar"}
             </Button>
@@ -198,7 +237,7 @@ export default function Planner() {
         </div>
       </div>
 
-      {!plan ? (
+      {!viewedPlan ? (
         <div className="rounded-[16px] border border-dashed border-line bg-surface-1 p-10 text-center text-ink-2">
           No active plan yet. Start one for next week.
         </div>
@@ -207,7 +246,7 @@ export default function Planner() {
           {/* mobile: horizontal scrollable strip; desktop: 7-col grid */}
           <div className="lg:grid lg:grid-cols-7 lg:gap-3 flex gap-3 overflow-x-auto amp-no-scrollbar -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0 snap-x snap-mandatory">
             {DAYS.map((day) => {
-              const meals = plan.plannedMeals.filter((m) => m.day === day);
+              const meals = viewedPlan.plannedMeals.filter((m) => m.day === day);
               const isToday = day === today;
               return (
                 <div
