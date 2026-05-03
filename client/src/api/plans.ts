@@ -125,10 +125,7 @@ export function parseWeekParam(raw: string | null | undefined): string {
   const dayIndex = (d.getDay() + 6) % 7;
   const monday = new Date(d);
   monday.setDate(d.getDate() - dayIndex);
-  const yyyy = monday.getFullYear();
-  const mm = String(monday.getMonth() + 1).padStart(2, "0");
-  const dd = String(monday.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+  return formatLocalDate(monday);
 }
 
 /**
