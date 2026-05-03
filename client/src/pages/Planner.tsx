@@ -309,7 +309,12 @@ export default function Planner() {
             +{sortedDuplicates.length - 1} other plan{sortedDuplicates.length - 1 === 1 ? "" : "s"} for this week.
           </span>
           <button
-            onClick={() => setDuplicateIndex((i) => (i + 1) % sortedDuplicates.length)}
+            onClick={() => {
+              setDuplicateIndex((i) => (i + 1) % sortedDuplicates.length);
+              setEditing(null);
+              setPicker(null);
+            }}
+            aria-label={`Switch to next plan for this week (showing ${(duplicateIndex % sortedDuplicates.length) + 1} of ${sortedDuplicates.length})`}
             className="ml-auto text-[12.5px] font-semibold underline hover:no-underline"
           >
             Switch
