@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Sparkles,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   Flame,
   Leaf,
   Plus,
@@ -51,6 +53,15 @@ function dayDate(weekStart: string, dayKey: string): number {
   return start.getDate();
 }
 
+function stepWeek(weekStart: string, deltaDays: number): string {
+  const d = new Date(weekStart + "T00:00:00");
+  d.setDate(d.getDate() + deltaDays);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 type Slot = "lunch" | "dinner";
 type DayKey = typeof DAYS[number];
 type PickerCtx =
@@ -91,6 +102,13 @@ export default function Planner() {
     () => pickPlanForWeek(plans, viewedWeek),
     [plans, viewedWeek],
   );
+
+  const todayWeek = useMemo(() => parseWeekParam(null), []);
+  const isViewingToday = viewedWeek === todayWeek;
+
+  const goPrevWeek = () => setSearchParams({ week: stepWeek(viewedWeek, -7) });
+  const goNextWeek = () => setSearchParams({ week: stepWeek(viewedWeek, +7) });
+  const goToday    = () => { if (!isViewingToday) setSearchParams({ week: todayWeek }); };
 
   const handlePick = async (mealId: number) => {
     if (!viewedPlan || !picker) return;
@@ -204,8 +222,31 @@ export default function Planner() {
     <div className="flex flex-col gap-7">
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
-          <div className="text-[12px] uppercase tracking-[0.1em] text-ink-3 mb-1.5">
-            Week of {monthLabel}
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <button
+              onClick={goPrevWeek}
+              aria-label="Previous week"
+              className="w-7 h-7 grid place-items-center rounded-[8px] text-ink-2 hover:bg-surface-2 hover:text-ink-1"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <div className="text-[12px] uppercase tracking-[0.1em] text-ink-3 select-none">
+              Week of {monthLabel}
+            </div>
+            <button
+              onClick={goNextWeek}
+              aria-label="Next week"
+              className="w-7 h-7 grid place-items-center rounded-[8px] text-ink-2 hover:bg-surface-2 hover:text-ink-1"
+            >
+              <ChevronRight size={14} />
+            </button>
+            <button
+              onClick={goToday}
+              disabled={isViewingToday}
+              className="ml-1 px-2 py-1 text-[11px] uppercase tracking-[0.08em] font-semibold rounded-[8px] text-ink-2 hover:bg-surface-2 hover:text-ink-1 disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-ink-2"
+            >
+              Today
+            </button>
           </div>
           <h1 className="text-[26px] sm:text-[30px] font-semibold -tracking-[0.02em] text-ink-1">
             Weekly Planner
