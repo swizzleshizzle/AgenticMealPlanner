@@ -101,6 +101,34 @@ export default function Planner() {
     [plans, viewedWeek],
   );
 
+  const weekDuplicates = useMemo(
+    () => plans.filter((p) => p.weekStartDate.slice(0, 10) === viewedWeek),
+    [plans, viewedWeek],
+  );
+
+  // Track which duplicate is currently in view. Defaults to the same one
+  // pickPlanForWeek picks; clicking the switcher cycles forward.
+  const [duplicateIndex, setDuplicateIndex] = useState(0);
+
+  // When the viewed week changes, reset the duplicate cursor.
+  useEffect(() => {
+    setDuplicateIndex(0);
+  }, [viewedWeek]);
+
+  // Override the viewedPlan derivation when there are duplicates and the
+  // user has rotated past the first one. We sort the duplicates the same
+  // way pickPlanForWeek does (drafts first, then by id).
+  const sortedDuplicates = useMemo(() => {
+    const drafts = weekDuplicates.filter((p) => p.status === "draft").sort((a, b) => a.id - b.id);
+    const others = weekDuplicates.filter((p) => p.status !== "draft").sort((a, b) => a.id - b.id);
+    return [...drafts, ...others];
+  }, [weekDuplicates]);
+
+  const effectiveViewedPlan =
+    sortedDuplicates.length > 1
+      ? sortedDuplicates[duplicateIndex % sortedDuplicates.length]
+      : viewedPlan;
+
   const todayWeek = useMemo(() => parseWeekParam(null), []);
   const isViewingToday = viewedWeek === todayWeek;
   const isPastWeek = viewedWeek < todayWeek;
@@ -110,11 +138,11 @@ export default function Planner() {
   const goToday    = () => { if (!isViewingToday) setSearchParams({ week: todayWeek }); };
 
   const handlePick = async (mealId: number) => {
-    if (!viewedPlan || !picker) return;
+    if (!effectiveViewedPlan || !picker) return;
     const meal = meals.find((m) => m.id === mealId);
     if (picker.mode === "add") {
       const canBatchHere = picker.day === "sunday" && !!meal?.canBatch;
-      const planned = await addPlannedMeal(viewedPlan.id, {
+      const planned = await addPlannedMeal(effectiveViewedPlan.id, {
         mealId,
         day: picker.day,
         mealSlot: picker.slot,
@@ -123,16 +151,16 @@ export default function Planner() {
       });
       setPlans((prev) =>
         prev.map((p) =>
-          p.id === viewedPlan.id
+          p.id === effectiveViewedPlan.id
             ? { ...p, plannedMeals: [...p.plannedMeals, planned as PlannedMeal] }
             : p,
         ),
       );
     } else {
-      const updated = await updatePlannedMeal(viewedPlan.id, picker.plannedId, { mealId });
+      const updated = await updatePlannedMeal(effectiveViewedPlan.id, picker.plannedId, { mealId });
       setPlans((prev) =>
         prev.map((p) =>
-          p.id === viewedPlan.id
+          p.id === effectiveViewedPlan.id
             ? { ...p, plannedMeals: p.plannedMeals.map((pm) => (pm.id === updated.id ? updated : pm)) }
             : p,
         ),
@@ -143,11 +171,11 @@ export default function Planner() {
   };
 
   const updatePm = async (pm: PlannedMeal, patch: Partial<PlannedMeal>) => {
-    if (!viewedPlan) return;
-    const updated = await updatePlannedMeal(viewedPlan.id, pm.id, patch);
+    if (!effectiveViewedPlan) return;
+    const updated = await updatePlannedMeal(effectiveViewedPlan.id, pm.id, patch);
     setPlans((prev) =>
       prev.map((p) =>
-        p.id === viewedPlan.id
+        p.id === effectiveViewedPlan.id
           ? { ...p, plannedMeals: p.plannedMeals.map((x) => (x.id === updated.id ? updated : x)) }
           : p,
       ),
@@ -156,11 +184,11 @@ export default function Planner() {
   };
 
   const removePm = async (pm: PlannedMeal) => {
-    if (!viewedPlan) return;
-    await removePlannedMeal(viewedPlan.id, pm.id);
+    if (!effectiveViewedPlan) return;
+    await removePlannedMeal(effectiveViewedPlan.id, pm.id);
     setPlans((prev) =>
       prev.map((p) =>
-        p.id === viewedPlan.id
+        p.id === effectiveViewedPlan.id
           ? { ...p, plannedMeals: p.plannedMeals.filter((x) => x.id !== pm.id) }
           : p,
       ),
@@ -174,24 +202,24 @@ export default function Planner() {
   };
 
   const handleGenerate = async () => {
-    if (!viewedPlan) return;
+    if (!effectiveViewedPlan) return;
     setGenerating(true);
     try {
-      const updated = await generatePlan(viewedPlan.id);
+      const updated = await generatePlan(effectiveViewedPlan.id);
       setPlans((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
     } finally { setGenerating(false); }
   };
 
   const handleActivate = async () => {
-    if (!viewedPlan) return;
-    const updated = await updatePlan(viewedPlan.id, { status: "active" });
+    if (!effectiveViewedPlan) return;
+    const updated = await updatePlan(effectiveViewedPlan.id, { status: "active" });
     setPlans((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
   };
 
   const handleSync = async () => {
-    if (!viewedPlan) return;
+    if (!effectiveViewedPlan) return;
     setSyncing(true);
-    try { await syncCalendar(viewedPlan.id); } finally { setSyncing(false); }
+    try { await syncCalendar(effectiveViewedPlan.id); } finally { setSyncing(false); }
   };
 
   const today = isViewingToday ? todayKey() : null;
@@ -201,11 +229,11 @@ export default function Planner() {
   const monthLabel = startObj.toLocaleDateString(undefined, { month: "long", day: "numeric" });
 
   const summary = useMemo(() => {
-    if (!viewedPlan) return null;
-    const prep = viewedPlan.plannedMeals.filter((m) => m.isPrep && m.status !== "skipped").length;
-    const fresh = viewedPlan.plannedMeals.filter((m) => !m.isPrep && m.status !== "skipped").length;
+    if (!effectiveViewedPlan) return null;
+    const prep = effectiveViewedPlan.plannedMeals.filter((m) => m.isPrep && m.status !== "skipped").length;
+    const fresh = effectiveViewedPlan.plannedMeals.filter((m) => !m.isPrep && m.status !== "skipped").length;
     let totalProtein = 0, count = 0;
-    for (const pm of viewedPlan.plannedMeals) {
+    for (const pm of effectiveViewedPlan.plannedMeals) {
       if (pm.status === "skipped") continue;
       const scale = pm.servings / (pm.meal.servings || 1);
       if (pm.meal.proteinG) {
@@ -215,7 +243,7 @@ export default function Planner() {
     }
     const avgProtein = count > 0 ? Math.round(totalProtein / count) : 0;
     return { prep, fresh, avgProtein };
-  }, [viewedPlan]);
+  }, [effectiveViewedPlan]);
 
   return (
     <div className="flex flex-col gap-7">
@@ -252,13 +280,13 @@ export default function Planner() {
           </h1>
         </div>
         <div className="flex gap-2.5 items-center flex-wrap">
-          {viewedPlan && (
-            <Pill tone={viewedPlan.status === "active" ? "accent" : viewedPlan.status === "draft" ? "warn" : "neutral"} size="md">
-              {viewedPlan.status === "active" ? <Check size={11} /> : null}
-              {viewedPlan.status === "active" ? "Active plan" : viewedPlan.status === "draft" ? "Draft" : viewedPlan.status}
+          {effectiveViewedPlan && (
+            <Pill tone={effectiveViewedPlan.status === "active" ? "accent" : effectiveViewedPlan.status === "draft" ? "warn" : "neutral"} size="md">
+              {effectiveViewedPlan.status === "active" ? <Check size={11} /> : null}
+              {effectiveViewedPlan.status === "active" ? "Active plan" : effectiveViewedPlan.status === "draft" ? "Draft" : effectiveViewedPlan.status}
             </Pill>
           )}
-          {viewedPlan?.status === "draft" && (
+          {effectiveViewedPlan?.status === "draft" && (
             <>
               <Button variant="ghost" icon={Sparkles} onClick={handleGenerate} disabled={generating}>
                 {generating ? "Generating…" : "Auto-generate"}
@@ -266,7 +294,7 @@ export default function Planner() {
               <Button variant="primary" onClick={handleActivate}>Confirm plan</Button>
             </>
           )}
-          {viewedPlan?.status === "active" && (
+          {effectiveViewedPlan?.status === "active" && (
             <Button variant="primary" icon={CalendarDays} onClick={handleSync} disabled={syncing}>
               {syncing ? "Syncing…" : "Sync to Calendar"}
             </Button>
@@ -274,7 +302,22 @@ export default function Planner() {
         </div>
       </div>
 
-      {!viewedPlan ? (
+      {sortedDuplicates.length > 1 && (
+        <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-[10px] bg-warn-soft border border-warn-line text-warn-ink text-[12.5px]">
+          <span>
+            Showing <span className="font-semibold capitalize">{effectiveViewedPlan?.status}</span>.
+            +{sortedDuplicates.length - 1} other plan{sortedDuplicates.length - 1 === 1 ? "" : "s"} for this week.
+          </span>
+          <button
+            onClick={() => setDuplicateIndex((i) => (i + 1) % sortedDuplicates.length)}
+            className="ml-auto text-[12.5px] font-semibold underline hover:no-underline"
+          >
+            Switch
+          </button>
+        </div>
+      )}
+
+      {!effectiveViewedPlan ? (
         <>
           <EmptyWeekCard
             isPastWeek={isPastWeek}
@@ -288,7 +331,7 @@ export default function Planner() {
           {/* mobile: horizontal scrollable strip; desktop: 7-col grid */}
           <div className="lg:grid lg:grid-cols-7 lg:gap-3 flex gap-3 overflow-x-auto amp-no-scrollbar -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0 snap-x snap-mandatory">
             {DAYS.map((day) => {
-              const meals = viewedPlan.plannedMeals.filter((m) => m.day === day);
+              const meals = effectiveViewedPlan.plannedMeals.filter((m) => m.day === day);
               const isToday = day === today;
               return (
                 <div
