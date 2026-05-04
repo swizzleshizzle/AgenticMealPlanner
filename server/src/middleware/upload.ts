@@ -17,12 +17,12 @@ export const upload = multer({
   storage,
   limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const allowed = [".pdf", ".png", ".jpg", ".jpeg", ".webp"];
+    const allowed = [".pdf", ".png", ".jpg", ".jpeg", ".webp", ".heic"];
     const ext = path.extname(file.originalname).toLowerCase();
     if (allowed.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error(`File type ${ext} not supported. Use PDF, PNG, JPG, or WEBP.`));
+      cb(new Error(`File type ${ext} not supported. Use PDF, PNG, JPG, WEBP, or HEIC.`));
     }
   },
 });

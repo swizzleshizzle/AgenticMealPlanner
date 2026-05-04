@@ -8,6 +8,7 @@ import shoppingRoutes from "./routes/shopping.js";
 import chatRoutes from "./routes/chat.js";
 import calendarRoutes from "./routes/calendar.js";
 import mediaRouter from "./routes/media.js";
+import receiptRoutes from "./routes/receipts.js";
 import { ensurePopplerAvailable } from "./services/pdfExtraction.js";
 
 const app = express();
@@ -28,6 +29,7 @@ app.use("/api/shopping", shoppingRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/calendar", calendarRoutes);
 app.use("/media", mediaRouter);
+app.use("/api/receipts", receiptRoutes);
 
 ensurePopplerAvailable().then(({ pdfimages, pdftoppm }) => {
   if (!pdfimages || !pdftoppm) {
