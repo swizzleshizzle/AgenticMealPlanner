@@ -47,7 +47,7 @@ export function localMidnightFromISO(s: string): Date {
   return new Date(s.slice(0, 10) + "T00:00:00");
 }
 
-function formatLocalDate(d: Date): string {
+export function formatLocalDate(d: Date): string {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
@@ -98,4 +98,49 @@ export function pickRelevantPlan(plans: WeeklyPlan[]): WeeklyPlan | null {
       ?? covering[0]
       ?? candidates[0]
       ?? null;
+}
+
+/**
+ * Normalize an arbitrary week-param string to a 'YYYY-MM-DD' Monday in local
+ * time. Used to make the viewed-week URL canonical regardless of how the
+ * user landed on the page.
+ *
+ *   - Valid 'YYYY-MM-DD' that's already a Monday → unchanged.
+ *   - Valid 'YYYY-MM-DD' on any other day        → snaps to that calendar
+ *                                                   week's Monday.
+ *   - Empty / null / undefined / unparseable     → today's Monday.
+ */
+export function parseWeekParam(raw: string | null | undefined): string {
+  let d: Date;
+  if (!raw) {
+    d = new Date();
+  } else {
+    // Accept either 'YYYY-MM-DD' or a longer ISO string; treat as local midnight.
+    const ymd = raw.length >= 10 ? raw.slice(0, 10) : raw;
+    const tryDate = new Date(ymd + "T00:00:00");
+    d = Number.isNaN(tryDate.getTime()) ? new Date() : tryDate;
+  }
+  // JS getDay(): 0 = Sunday … 6 = Saturday. We want Monday-anchored weeks
+  // where Monday = 0 and Sunday = 6.
+  const dayIndex = (d.getDay() + 6) % 7;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - dayIndex);
+  return formatLocalDate(monday);
+}
+
+/**
+ * Pick the plan that represents the viewed week. Drafts win the default
+ * tiebreak; otherwise lowest id wins (deterministic). Returns null when no
+ * plan matches.
+ */
+export function pickPlanForWeek(
+  plans: WeeklyPlan[],
+  weekStart: string,
+): WeeklyPlan | null {
+  const matches = plans.filter((p) => p.weekStartDate.slice(0, 10) === weekStart);
+  if (matches.length === 0) return null;
+  const draft = matches.find((p) => p.status === "draft");
+  if (draft) return draft;
+  // Lowest id deterministic tiebreak.
+  return matches.slice().sort((a, b) => a.id - b.id)[0];
 }
