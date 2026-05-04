@@ -66,7 +66,7 @@ export default function AddFromReceiptModal({ onClose, onCommitted }: Props) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-surface-1 rounded-[16px] w-full max-w-[640px] max-h-[88vh] flex flex-col overflow-hidden border border-line"
+        className="bg-surface-1 rounded-[16px] w-full max-w-[640px] md:max-w-[1000px] max-h-[88vh] flex flex-col overflow-hidden border border-line"
         style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
       >
         <div className="flex items-start gap-3 px-4 sm:px-5 py-3.5 border-b border-line-soft">
@@ -198,6 +198,14 @@ export default function AddFromReceiptModal({ onClose, onCommitted }: Props) {
 const LOCATIONS: Array<"fridge" | "freezer" | "pantry"> = ["fridge", "freezer", "pantry"];
 const CATEGORIES = ["produce", "protein", "dairy", "pantry_staple", "grain", "spice", "condiment", "frozen", "other"] as const;
 
+// Shared grid template for the new desktop (md+) review table.
+// Columns: ☐ · Item · Qty · Unit · Location · Expires · Price.
+// At md (768px viewport) the modal is 728px usable, the fixed columns
+// + gaps consume ~532px, and the Item column gets ~196px — tight but viable.
+// At 1000px (md+ desktop cap) the Item column gets ~430px.
+const RECEIPT_ROW_GRID =
+  "md:grid md:grid-cols-[28px_minmax(0,1fr)_72px_72px_104px_136px_72px] md:items-center md:gap-2";
+
 interface RowState extends CommitItemEdit {
   // Mirror of the parsed item, plus a UI-only flag for the inline create mini-form.
   showCreateForm: boolean;
@@ -319,6 +327,17 @@ function ReviewStage({
           <div className="text-[11px] uppercase tracking-[0.08em] text-ink-3 font-semibold">
             Food items ({committedFoodCount}/{foodRows.length} selected)
           </div>
+          <div
+            className={`hidden sticky top-0 z-10 bg-surface-1 border-b border-line-soft px-3 py-1.5 text-[11px] uppercase tracking-[0.08em] text-ink-3 font-semibold ${RECEIPT_ROW_GRID}`}
+          >
+            <span aria-hidden />
+            <span>Item</span>
+            <span>Qty</span>
+            <span>Unit</span>
+            <span>Location</span>
+            <span>Expires</span>
+            <span className="text-right">Price</span>
+          </div>
           <ul className="flex flex-col gap-1.5">
             {foodRows.map((row) => (
               <RowEditor
@@ -383,79 +402,83 @@ function RowEditor({
   onPatch: (patch: Partial<RowState>) => void;
 }) {
   return (
-    <li className={`rounded-[10px] border border-line-soft bg-surface-2 px-3 py-2 ${!row.isCommitted ? "opacity-50" : ""}`}>
-      <div className="grid grid-cols-[auto_1fr_auto_auto] sm:grid-cols-[auto_2fr_1fr_1fr_1fr_auto_auto] gap-2 items-center">
-        <input
-          type="checkbox"
-          checked={row.isCommitted}
-          disabled={disabled}
-          onChange={(e) => onPatch({ isCommitted: e.target.checked })}
-          className="w-4 h-4 accent-accent"
-        />
+    <li
+      className={`rounded-[10px] border border-line-soft bg-surface-2 px-3 py-2 grid grid-cols-[auto_1fr_auto_auto] gap-2 items-center ${RECEIPT_ROW_GRID} ${!row.isCommitted ? "opacity-50" : ""}`}
+    >
+      <input
+        type="checkbox"
+        checked={row.isCommitted}
+        disabled={disabled}
+        onChange={(e) => onPatch({ isCommitted: e.target.checked })}
+        className="w-4 h-4 accent-accent"
+      />
 
-        {/* Ingredient match cell */}
-        <div className="min-w-0">
-          {row.ingredientId != null ? (
-            <div className="flex items-center gap-1.5">
-              <span
-                className={`inline-flex items-center px-2 py-0.5 rounded-[6px] text-[11.5px] font-medium ${
-                  row.matchConfidence === "low"
-                    ? "bg-warn-soft text-warn-ink border border-warn-line"
-                    : "bg-accent-soft text-accent-ink border border-accent-line"
-                }`}
-              >
-                {row.matchedIngredientName ?? `#${row.ingredientId}`}
-              </span>
-              <span className="text-[11px] text-ink-3 truncate">{row.parsedName}</span>
-            </div>
-          ) : (
-            <button
-              onClick={() => onPatch({ showCreateForm: !row.showCreateForm })}
-              disabled={disabled}
-              className="inline-flex items-center gap-1 text-[12px] text-accent-ink hover:underline"
+      {/* Ingredient match cell */}
+      <div className="min-w-0">
+        {row.ingredientId != null ? (
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded-[6px] text-[11.5px] font-medium shrink-0 ${
+                row.matchConfidence === "low"
+                  ? "bg-warn-soft text-warn-ink border border-warn-line"
+                  : "bg-accent-soft text-accent-ink border border-accent-line"
+              }`}
             >
-              <Plus size={12} /> Create &ldquo;{row.parsedName}&rdquo;
-            </button>
-          )}
-        </div>
-
-        <input
-          type="number"
-          step="0.01"
-          value={row.quantity}
-          disabled={disabled || !row.isCommitted}
-          onChange={(e) => onPatch({ quantity: Number(e.target.value) })}
-          className="h-8 w-20 rounded-[8px] border border-line bg-surface-1 px-2 text-[12.5px] text-ink-1 tabular-nums focus:outline-none focus:border-accent disabled:opacity-50"
-        />
-        <input
-          type="text"
-          value={row.unit}
-          disabled={disabled || !row.isCommitted}
-          onChange={(e) => onPatch({ unit: e.target.value })}
-          className="h-8 w-20 rounded-[8px] border border-line bg-surface-1 px-2 text-[12.5px] text-ink-1 focus:outline-none focus:border-accent disabled:opacity-50"
-        />
-        <select
-          value={row.locationGuess ?? "pantry"}
-          disabled={disabled || !row.isCommitted}
-          onChange={(e) => onPatch({ locationGuess: e.target.value as any })}
-          className="h-8 rounded-[8px] border border-line bg-surface-1 px-2 text-[12.5px] text-ink-1 capitalize focus:outline-none focus:border-accent disabled:opacity-50"
-        >
-          {LOCATIONS.map((l) => <option key={l} value={l}>{l}</option>)}
-        </select>
-        <input
-          type="date"
-          value={row.expirationDate ?? ""}
-          disabled={disabled || !row.isCommitted}
-          onChange={(e) => onPatch({ expirationDate: e.target.value || null })}
-          className="h-8 rounded-[8px] border border-line bg-surface-1 px-2 text-[12px] text-ink-1 focus:outline-none focus:border-accent disabled:opacity-50"
-        />
-        <span className="text-[12.5px] text-ink-2 tabular-nums w-16 text-right">
-          {row.price != null ? `$${row.price.toFixed(2)}` : "—"}
-        </span>
+              {row.matchedIngredientName ?? `#${row.ingredientId}`}
+            </span>
+            <span className="text-[11px] text-ink-3 truncate" title={row.parsedName}>
+              {row.parsedName}
+            </span>
+          </div>
+        ) : (
+          <button
+            onClick={() => onPatch({ showCreateForm: !row.showCreateForm })}
+            disabled={disabled}
+            title={`Create "${row.parsedName}"`}
+            className="flex items-center gap-1 max-w-full min-w-0 text-[12px] text-accent-ink hover:underline"
+          >
+            <Plus size={12} className="shrink-0" />
+            <span className="truncate">Create &ldquo;{row.parsedName}&rdquo;</span>
+          </button>
+        )}
       </div>
 
+      <input
+        type="number"
+        step="0.01"
+        value={row.quantity}
+        disabled={disabled || !row.isCommitted}
+        onChange={(e) => onPatch({ quantity: Number(e.target.value) })}
+        className="h-8 w-20 md:w-full rounded-[8px] border border-line bg-surface-1 px-2 text-[12.5px] text-ink-1 tabular-nums focus:outline-none focus:border-accent disabled:opacity-50"
+      />
+      <input
+        type="text"
+        value={row.unit === "count" ? "ea" : row.unit}
+        disabled={disabled || !row.isCommitted}
+        onChange={(e) => onPatch({ unit: e.target.value })}
+        className="h-8 w-20 md:w-full rounded-[8px] border border-line bg-surface-1 px-2 text-[12.5px] text-ink-1 focus:outline-none focus:border-accent disabled:opacity-50"
+      />
+      <select
+        value={row.locationGuess ?? "pantry"}
+        disabled={disabled || !row.isCommitted}
+        onChange={(e) => onPatch({ locationGuess: e.target.value as any })}
+        className="h-8 md:w-full rounded-[8px] border border-line bg-surface-1 px-2 text-[12.5px] text-ink-1 capitalize focus:outline-none focus:border-accent disabled:opacity-50"
+      >
+        {LOCATIONS.map((l) => <option key={l} value={l}>{l}</option>)}
+      </select>
+      <input
+        type="date"
+        value={row.expirationDate ?? ""}
+        disabled={disabled || !row.isCommitted}
+        onChange={(e) => onPatch({ expirationDate: e.target.value || null })}
+        className="h-8 md:w-full rounded-[8px] border border-line bg-surface-1 px-2 text-[12px] text-ink-1 focus:outline-none focus:border-accent disabled:opacity-50"
+      />
+      <span className="text-[12.5px] text-ink-2 tabular-nums w-16 md:w-full text-right">
+        {row.price != null ? `$${row.price.toFixed(2)}` : "—"}
+      </span>
+
       {row.showCreateForm && row.ingredientId == null && (
-        <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div className="col-span-full mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
           <Field label="Name">
             <input
               value={row.parsedName}
