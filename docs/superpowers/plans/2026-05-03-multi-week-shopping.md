@@ -8,7 +8,7 @@
 
 **Tech Stack:** React 18, TypeScript, `react-router-dom` v7 (`useSearchParams`), Tailwind v4. No new dependencies. Server is unchanged — `GET /api/plans`, `GET /api/shopping/:planId`, `POST /api/shopping/generate/:planId`, `PUT /api/shopping/item/:id` all stay as-is.
 
-**Depends on:** the multi-week-planner work (`feature/multi-week-planner` branch). It exports `parseWeekParam` and `pickPlanForWeek` from `client/src/api/plans.ts` — both are required here. `localMidnightFromISO` is already on `master`.
+**Depends on:** the multi-week-planner work, **already merged to `master`** (PR #4). It exports `parseWeekParam` and `pickPlanForWeek` from `client/src/api/plans.ts` — both are required here. `localMidnightFromISO` is also already on `master`.
 
 ---
 
@@ -27,11 +27,11 @@
 
 ---
 
-## Pre-flight: pick a base branch and create the worktree
+## Pre-flight: create the worktree and branch
 
-This feature **depends on `parseWeekParam` and `pickPlanForWeek` from the multi-week-planner work**. Two paths depending on whether that PR has merged:
+This feature branches from `master`. The multi-week-planner PR (#4) has merged, so all required helpers (`parseWeekParam`, `pickPlanForWeek`, `localMidnightFromISO`) are on `origin/master`.
 
-### Option A — multi-week-planner has merged to master
+- [ ] **Step 1: Create the worktree**
 
 ```bash
 cd C:\Users\mlgbr\Desktop\Projects\AgenticMealPlanner
@@ -39,23 +39,6 @@ git fetch origin
 git worktree add .worktrees/multi-week-shopping -b feature/multi-week-shopping origin/master
 cd .worktrees/multi-week-shopping
 ```
-
-### Option B — multi-week-planner is still an open PR
-
-Base on the planner's branch directly so the helpers are present:
-
-```bash
-cd C:\Users\mlgbr\Desktop\Projects\AgenticMealPlanner
-git fetch origin
-git worktree add .worktrees/multi-week-shopping -b feature/multi-week-shopping origin/feature/multi-week-planner
-cd .worktrees/multi-week-shopping
-```
-
-If you base on Option B, the eventual PR's base should also be `feature/multi-week-planner` (use `gh pr create --base feature/multi-week-planner ...` in Task 6). When `feature/multi-week-planner` merges to master, the shopping PR will automatically retarget to master in GitHub's UI, or you can `gh pr edit <num> --base master` to flip it explicitly.
-
-To choose: `gh pr view <planner-PR-number> --json state` — `MERGED` → Option A; anything else → Option B.
-
-- [ ] **Step 1: Decide base, run the matching worktree command above**
 
 - [ ] **Step 2: Verify the helpers are present**
 
@@ -877,13 +860,8 @@ git push -u origin feature/multi-week-shopping
 
 - [ ] **Step 2: Open the PR**
 
-Pick the base branch based on which one you used in pre-flight:
-
-- **Pre-flight Option A (based on master):** `gh pr create --base master`
-- **Pre-flight Option B (based on `feature/multi-week-planner`):** `gh pr create --base feature/multi-week-planner`
-
 ```bash
-gh pr create --base <base-from-pre-flight> --title "feat: multi-week navigation on the Shopping List + broken-date fix" --body "$(cat <<'EOF'
+gh pr create --base master --title "feat: multi-week navigation on the Shopping List + broken-date fix" --body "$(cat <<'EOF'
 ## Summary
 
 - Replace the Shopping List's "active plan or first plan" auto-pick with URL-driven multi-week navigation. The viewed week lives in `?week=YYYY-MM-DD` (always a Monday). Same pattern as the planner — `parseWeekParam` + `pickPlanForWeek` from `api/plans.ts`.
@@ -891,10 +869,6 @@ gh pr create --base <base-from-pre-flight> --title "feat: multi-week navigation 
 - Six-state body matrix: past weeks are read-only (disabled checkboxes, no Generate button at all); current/future weeks show the existing items UI when a list is generated, a `Generate from this week's plan` CTA when only the plan exists, and a `Create one in the Planner →` link (carrying `?week=`) when no plan exists.
 - Fix the broken `Week of <date>` header — was rendering "Invalid Date" because the code concatenated `"T00:00:00"` onto an already-ISO string. Now derives from `viewedWeek` via `localMidnightFromISO`.
 - No server changes — `GET /api/plans`, `GET /api/shopping/:planId`, `POST /api/shopping/generate/:planId`, `PUT /api/shopping/item/:id` all stay as-is.
-
-## Base branch note
-
-Pick the base based on whether the multi-week-planner PR has merged to master. This branch needs `parseWeekParam` and `pickPlanForWeek`, which only exist on `feature/multi-week-planner` until that PR merges. After it merges, retarget this PR with \`gh pr edit <num> --base master\` (GitHub may auto-retarget when the upstream branch is deleted).
 
 ## Test plan
 
