@@ -465,7 +465,7 @@ function RowEditor({
       </span>
 
       {row.showCreateForm && row.ingredientId == null && (
-        <div className="col-span-full md:col-span-7 mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div className="col-span-full mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
           <Field label="Name">
             <input
               value={row.parsedName}
