@@ -43,7 +43,7 @@ export async function addPlannedMeal(planId: number, data: {
   day: string;
   mealSlot: string;
   servings: number;
-  isPrep: boolean;
+  cookStyle: "cook_fresh" | "batch_prep" | "leftovers";
 }) {
   return prisma.plannedMeal.create({
     data: { planId, ...data } as any,
@@ -55,7 +55,7 @@ export async function updatePlannedMeal(id: number, data: {
   status?: string;
   mealId?: number;
   servings?: number;
-  isPrep?: boolean;
+  cookStyle?: "cook_fresh" | "batch_prep" | "leftovers";
 }) {
   return prisma.plannedMeal.update({
     where: { id },

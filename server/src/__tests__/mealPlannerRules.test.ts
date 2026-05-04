@@ -10,42 +10,42 @@ const meals: Record<number, M> = {
 };
 
 describe("filterValidPlannedMeals — Sunday-only batch rule", () => {
-  it("keeps isPrep=true only when day=sunday and meal canBatch", () => {
+  it("keeps batch_prep only when day=sunday and meal canBatch", () => {
     const input = [
-      { mealId: 1, day: "sunday",   mealSlot: "dinner", servings: 2, isPrep: true },
-      { mealId: 3, day: "sunday",   mealSlot: "lunch",  servings: 2, isPrep: true },
+      { mealId: 1, day: "sunday",   mealSlot: "dinner", servings: 2, cookStyle: "batch_prep" as const },
+      { mealId: 3, day: "sunday",   mealSlot: "lunch",  servings: 2, cookStyle: "batch_prep" as const },
     ];
     expect(filterValidPlannedMeals(input, meals)).toEqual(input);
   });
 
-  it("drops isPrep=true on non-Sunday days", () => {
+  it("drops batch_prep on non-Sunday days", () => {
     const input = [
-      { mealId: 1, day: "monday", mealSlot: "dinner", servings: 2, isPrep: true },
-      { mealId: 2, day: "monday", mealSlot: "lunch",  servings: 2, isPrep: false },
+      { mealId: 1, day: "monday", mealSlot: "dinner", servings: 2, cookStyle: "batch_prep" as const },
+      { mealId: 2, day: "monday", mealSlot: "lunch",  servings: 2, cookStyle: "cook_fresh" as const },
     ];
     const out = filterValidPlannedMeals(input, meals);
     expect(out).toEqual([
-      { mealId: 2, day: "monday", mealSlot: "lunch", servings: 2, isPrep: false },
+      { mealId: 2, day: "monday", mealSlot: "lunch", servings: 2, cookStyle: "cook_fresh" },
     ]);
   });
 
-  it("drops Sunday isPrep=true when meal can't batch", () => {
+  it("drops Sunday batch_prep when meal can't batch", () => {
     const input = [
-      { mealId: 2, day: "sunday", mealSlot: "dinner", servings: 2, isPrep: true },
+      { mealId: 2, day: "sunday", mealSlot: "dinner", servings: 2, cookStyle: "batch_prep" as const },
     ];
     expect(filterValidPlannedMeals(input, meals)).toEqual([]);
   });
 
-  it("drops fresh picks whose meal can't fresh", () => {
+  it("drops cook_fresh picks whose meal can't fresh", () => {
     const input = [
-      { mealId: 1, day: "monday", mealSlot: "dinner", servings: 2, isPrep: false },
+      { mealId: 1, day: "monday", mealSlot: "dinner", servings: 2, cookStyle: "cook_fresh" as const },
     ];
     expect(filterValidPlannedMeals(input, meals)).toEqual([]);
   });
 
   it("drops planned meals whose mealId is unknown", () => {
     const input = [
-      { mealId: 999, day: "monday", mealSlot: "dinner", servings: 2, isPrep: false },
+      { mealId: 999, day: "monday", mealSlot: "dinner", servings: 2, cookStyle: "cook_fresh" as const },
     ];
     expect(filterValidPlannedMeals(input, meals)).toEqual([]);
   });

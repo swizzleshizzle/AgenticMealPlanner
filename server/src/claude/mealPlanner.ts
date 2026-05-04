@@ -23,7 +23,7 @@ interface SuggestedPlan {
     day: string;
     mealSlot: string;
     servings: number;
-    isPrep: boolean;
+    cookStyle: "cook_fresh" | "batch_prep" | "leftovers";
   }[];
 }
 

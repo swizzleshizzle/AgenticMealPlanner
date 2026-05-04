@@ -6,6 +6,11 @@ import * as plannerService from "../services/plannerService.js";
 const router = Router();
 const prisma = new PrismaClient();
 
+export const dayOffsets: Record<string, number> = {
+  sunday: 0, monday: 1, tuesday: 2, wednesday: 3,
+  thursday: 4, friday: 5, saturday: 6,
+};
+
 router.get("/auth", (_req, res) => {
   const url = calendarService.getAuthUrl();
   res.redirect(url);
@@ -25,10 +30,6 @@ router.post("/sync/:planId", async (req, res) => {
   }
 
   const weekStart = new Date(plan.weekStartDate);
-  const dayOffsets: Record<string, number> = {
-    monday: 0, tuesday: 1, wednesday: 2, thursday: 3,
-    friday: 4, saturday: 5, sunday: 6,
-  };
 
   const results = [];
   for (const pm of plan.plannedMeals) {
@@ -37,7 +38,9 @@ router.post("/sync/:planId", async (req, res) => {
     mealDate.setDate(mealDate.getDate() + dayOffset);
     const dateStr = mealDate.toISOString().split("T")[0];
 
-    const prepNote = pm.isPrep ? " [Meal Prep]" : "";
+    const prepNote = pm.cookStyle === "batch_prep" ? " [Meal Prep]"
+                  : pm.cookStyle === "leftovers"  ? " [Leftovers]"
+                  : "";
     const eventId = await calendarService.createMealEvent({
       summary: `${pm.meal.name}${prepNote}`,
       description: `${pm.servings} servings | ${pm.mealSlot}`,
