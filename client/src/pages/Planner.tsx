@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Sparkles,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   Flame,
   Leaf,
   Plus,
@@ -17,11 +19,12 @@ import {
 import {
   addPlannedMeal,
   createPlan,
+  formatLocalDate,
   generatePlan,
   getPlans,
-  getNextMonday,
   localMidnightFromISO,
-  pickRelevantPlan,
+  parseWeekParam,
+  pickPlanForWeek,
   removePlannedMeal,
   updatePlan,
   updatePlannedMeal,
@@ -51,6 +54,12 @@ function dayDate(weekStart: string, dayKey: string): number {
   return start.getDate();
 }
 
+function stepWeek(weekStart: string, deltaDays: number): string {
+  const d = localMidnightFromISO(weekStart);
+  d.setDate(d.getDate() + deltaDays);
+  return formatLocalDate(d);
+}
+
 type Slot = "lunch" | "dinner";
 type DayKey = typeof DAYS[number];
 type PickerCtx =
@@ -58,98 +67,173 @@ type PickerCtx =
   | { mode: "swap"; day: DayKey; slot: Slot; plannedId: number };
 
 export default function Planner() {
-  const [plan, setPlan] = useState<WeeklyPlan | null>(null);
+  const [plans, setPlans] = useState<WeeklyPlan[]>([]);
   const [meals, setMeals] = useState<Meal[]>([]);
   const [picker, setPicker] = useState<PickerCtx | null>(null);
   const [editing, setEditing] = useState<PlannedMeal | null>(null);
   const [generating, setGenerating] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // The viewed week is the URL's source of truth. parseWeekParam normalizes
+  // anything weird (mid-week dates, garbage strings, missing param) to the
+  // Monday of the relevant calendar week.
+  const rawWeekParam = searchParams.get("week");
+  const viewedWeek = parseWeekParam(rawWeekParam);
+
+  // If the URL was missing or non-canonical, replace it (don't push) so the
+  // user's browser history doesn't get cluttered with redirects on first
+  // load.
+  useEffect(() => {
+    if (rawWeekParam !== viewedWeek) {
+      setSearchParams({ week: viewedWeek }, { replace: true });
+    }
+  }, [rawWeekParam, viewedWeek, setSearchParams]);
 
   useEffect(() => {
-    getPlans().then((p) => setPlan(pickRelevantPlan(p)));
+    getPlans().then(setPlans).catch(() => setPlans([]));
     getMeals().then(setMeals).catch(() => setMeals([]));
   }, []);
 
+  const viewedPlan = useMemo(
+    () => pickPlanForWeek(plans, viewedWeek),
+    [plans, viewedWeek],
+  );
+
+  const weekDuplicates = useMemo(
+    () => plans.filter((p) => p.weekStartDate.slice(0, 10) === viewedWeek),
+    [plans, viewedWeek],
+  );
+
+  // Track which duplicate is currently in view. Defaults to the same one
+  // pickPlanForWeek picks; clicking the switcher cycles forward.
+  const [duplicateIndex, setDuplicateIndex] = useState(0);
+
+  // When the viewed week changes, reset the duplicate cursor.
+  useEffect(() => {
+    setDuplicateIndex(0);
+  }, [viewedWeek]);
+
+  // Override the viewedPlan derivation when there are duplicates and the
+  // user has rotated past the first one. We sort the duplicates the same
+  // way pickPlanForWeek does (drafts first, then by id).
+  const sortedDuplicates = useMemo(() => {
+    const drafts = weekDuplicates.filter((p) => p.status === "draft").sort((a, b) => a.id - b.id);
+    const others = weekDuplicates.filter((p) => p.status !== "draft").sort((a, b) => a.id - b.id);
+    return [...drafts, ...others];
+  }, [weekDuplicates]);
+
+  const effectiveViewedPlan =
+    sortedDuplicates.length > 1
+      ? sortedDuplicates[duplicateIndex % sortedDuplicates.length]
+      : viewedPlan;
+
+  const todayWeek = useMemo(() => parseWeekParam(null), []);
+  const isViewingToday = viewedWeek === todayWeek;
+  const isPastWeek = viewedWeek < todayWeek;
+
+  const goPrevWeek = () => setSearchParams({ week: stepWeek(viewedWeek, -7) });
+  const goNextWeek = () => setSearchParams({ week: stepWeek(viewedWeek, +7) });
+  const goToday    = () => { if (!isViewingToday) setSearchParams({ week: todayWeek }); };
+
   const handlePick = async (mealId: number) => {
-    if (!plan || !picker) return;
+    if (!effectiveViewedPlan || !picker) return;
     const meal = meals.find((m) => m.id === mealId);
     if (picker.mode === "add") {
       const canBatchHere = picker.day === "sunday" && !!meal?.canBatch;
-      const planned = await addPlannedMeal(plan.id, {
+      const planned = await addPlannedMeal(effectiveViewedPlan.id, {
         mealId,
         day: picker.day,
         mealSlot: picker.slot,
         servings: meal?.servings ?? 2,
         isPrep: canBatchHere,
       });
-      setPlan({ ...plan, plannedMeals: [...plan.plannedMeals, planned as PlannedMeal] });
+      setPlans((prev) =>
+        prev.map((p) =>
+          p.id === effectiveViewedPlan.id
+            ? { ...p, plannedMeals: [...p.plannedMeals, planned as PlannedMeal] }
+            : p,
+        ),
+      );
     } else {
-      const updated = await updatePlannedMeal(plan.id, picker.plannedId, { mealId });
-      setPlan({
-        ...plan,
-        plannedMeals: plan.plannedMeals.map((pm) => (pm.id === updated.id ? updated : pm)),
-      });
+      const updated = await updatePlannedMeal(effectiveViewedPlan.id, picker.plannedId, { mealId });
+      setPlans((prev) =>
+        prev.map((p) =>
+          p.id === effectiveViewedPlan.id
+            ? { ...p, plannedMeals: p.plannedMeals.map((pm) => (pm.id === updated.id ? updated : pm)) }
+            : p,
+        ),
+      );
       if (editing?.id === updated.id) setEditing(updated);
     }
     setPicker(null);
   };
 
   const updatePm = async (pm: PlannedMeal, patch: Partial<PlannedMeal>) => {
-    if (!plan) return;
-    const updated = await updatePlannedMeal(plan.id, pm.id, patch);
-    setPlan({
-      ...plan,
-      plannedMeals: plan.plannedMeals.map((p) => (p.id === updated.id ? updated : p)),
-    });
+    if (!effectiveViewedPlan) return;
+    const updated = await updatePlannedMeal(effectiveViewedPlan.id, pm.id, patch);
+    setPlans((prev) =>
+      prev.map((p) =>
+        p.id === effectiveViewedPlan.id
+          ? { ...p, plannedMeals: p.plannedMeals.map((x) => (x.id === updated.id ? updated : x)) }
+          : p,
+      ),
+    );
     if (editing?.id === updated.id) setEditing(updated);
   };
 
   const removePm = async (pm: PlannedMeal) => {
-    if (!plan) return;
-    await removePlannedMeal(plan.id, pm.id);
-    setPlan({ ...plan, plannedMeals: plan.plannedMeals.filter((p) => p.id !== pm.id) });
+    if (!effectiveViewedPlan) return;
+    await removePlannedMeal(effectiveViewedPlan.id, pm.id);
+    setPlans((prev) =>
+      prev.map((p) =>
+        p.id === effectiveViewedPlan.id
+          ? { ...p, plannedMeals: p.plannedMeals.filter((x) => x.id !== pm.id) }
+          : p,
+      ),
+    );
     if (editing?.id === pm.id) setEditing(null);
   };
 
   const handleNew = async () => {
-    const next = await createPlan(getNextMonday());
-    setPlan(next);
+    const next = await createPlan(viewedWeek);
+    setPlans((prev) => [...prev, next]);
   };
 
   const handleGenerate = async () => {
-    if (!plan) return;
+    if (!effectiveViewedPlan) return;
     setGenerating(true);
     try {
-      const updated = await generatePlan(plan.id);
-      setPlan(updated);
+      const updated = await generatePlan(effectiveViewedPlan.id);
+      setPlans((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
     } finally { setGenerating(false); }
   };
 
   const handleActivate = async () => {
-    if (!plan) return;
-    const updated = await updatePlan(plan.id, { status: "active" });
-    setPlan(updated);
+    if (!effectiveViewedPlan) return;
+    const updated = await updatePlan(effectiveViewedPlan.id, { status: "active" });
+    setPlans((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
   };
 
   const handleSync = async () => {
-    if (!plan) return;
+    if (!effectiveViewedPlan) return;
     setSyncing(true);
-    try { await syncCalendar(plan.id); } finally { setSyncing(false); }
+    try { await syncCalendar(effectiveViewedPlan.id); } finally { setSyncing(false); }
   };
 
-  const today = todayKey();
+  const today = isViewingToday ? todayKey() : null;
 
-  const weekStart = plan?.weekStartDate ?? getNextMonday();
+  const weekStart = viewedWeek;
   const startObj = localMidnightFromISO(weekStart);
   const monthLabel = startObj.toLocaleDateString(undefined, { month: "long", day: "numeric" });
 
   const summary = useMemo(() => {
-    if (!plan) return null;
-    const prep = plan.plannedMeals.filter((m) => m.isPrep && m.status !== "skipped").length;
-    const fresh = plan.plannedMeals.filter((m) => !m.isPrep && m.status !== "skipped").length;
+    if (!effectiveViewedPlan) return null;
+    const prep = effectiveViewedPlan.plannedMeals.filter((m) => m.isPrep && m.status !== "skipped").length;
+    const fresh = effectiveViewedPlan.plannedMeals.filter((m) => !m.isPrep && m.status !== "skipped").length;
     let totalProtein = 0, count = 0;
-    for (const pm of plan.plannedMeals) {
+    for (const pm of effectiveViewedPlan.plannedMeals) {
       if (pm.status === "skipped") continue;
       const scale = pm.servings / (pm.meal.servings || 1);
       if (pm.meal.proteinG) {
@@ -159,30 +243,50 @@ export default function Planner() {
     }
     const avgProtein = count > 0 ? Math.round(totalProtein / count) : 0;
     return { prep, fresh, avgProtein };
-  }, [plan]);
+  }, [effectiveViewedPlan]);
 
   return (
     <div className="flex flex-col gap-7">
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
-          <div className="text-[12px] uppercase tracking-[0.1em] text-ink-3 mb-1.5">
-            Week of {monthLabel}
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <button
+              onClick={goPrevWeek}
+              aria-label="Previous week"
+              className="w-7 h-7 grid place-items-center rounded-[8px] text-ink-2 hover:bg-surface-2 hover:text-ink-1"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <div className="text-[12px] uppercase tracking-[0.1em] text-ink-3 select-none">
+              Week of {monthLabel}
+            </div>
+            <button
+              onClick={goNextWeek}
+              aria-label="Next week"
+              className="w-7 h-7 grid place-items-center rounded-[8px] text-ink-2 hover:bg-surface-2 hover:text-ink-1"
+            >
+              <ChevronRight size={14} />
+            </button>
+            <button
+              onClick={goToday}
+              disabled={isViewingToday}
+              className="ml-1 px-2 py-1 text-[11px] uppercase tracking-[0.08em] font-semibold rounded-[8px] text-ink-2 hover:bg-surface-2 hover:text-ink-1 disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-ink-2"
+            >
+              Today
+            </button>
           </div>
           <h1 className="text-[26px] sm:text-[30px] font-semibold -tracking-[0.02em] text-ink-1">
             Weekly Planner
           </h1>
         </div>
         <div className="flex gap-2.5 items-center flex-wrap">
-          {plan && (
-            <Pill tone={plan.status === "active" ? "accent" : plan.status === "draft" ? "warn" : "neutral"} size="md">
-              {plan.status === "active" ? <Check size={11} /> : null}
-              {plan.status === "active" ? "Active plan" : plan.status === "draft" ? "Draft" : plan.status}
+          {effectiveViewedPlan && (
+            <Pill tone={effectiveViewedPlan.status === "active" ? "accent" : effectiveViewedPlan.status === "draft" ? "warn" : "neutral"} size="md">
+              {effectiveViewedPlan.status === "active" ? <Check size={11} /> : null}
+              {effectiveViewedPlan.status === "active" ? "Active plan" : effectiveViewedPlan.status === "draft" ? "Draft" : effectiveViewedPlan.status}
             </Pill>
           )}
-          {!plan && (
-            <Button variant="primary" icon={Plus} onClick={handleNew}>New plan</Button>
-          )}
-          {plan?.status === "draft" && (
+          {effectiveViewedPlan?.status === "draft" && (
             <>
               <Button variant="ghost" icon={Sparkles} onClick={handleGenerate} disabled={generating}>
                 {generating ? "Generating…" : "Auto-generate"}
@@ -190,7 +294,7 @@ export default function Planner() {
               <Button variant="primary" onClick={handleActivate}>Confirm plan</Button>
             </>
           )}
-          {plan?.status === "active" && (
+          {effectiveViewedPlan?.status === "active" && (
             <Button variant="primary" icon={CalendarDays} onClick={handleSync} disabled={syncing}>
               {syncing ? "Syncing…" : "Sync to Calendar"}
             </Button>
@@ -198,16 +302,41 @@ export default function Planner() {
         </div>
       </div>
 
-      {!plan ? (
-        <div className="rounded-[16px] border border-dashed border-line bg-surface-1 p-10 text-center text-ink-2">
-          No active plan yet. Start one for next week.
+      {sortedDuplicates.length > 1 && (
+        <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-[10px] bg-warn-soft border border-warn-line text-warn-ink text-[12.5px]">
+          <span>
+            Showing <span className="font-semibold capitalize">{effectiveViewedPlan?.status}</span>.
+            +{sortedDuplicates.length - 1} other plan{sortedDuplicates.length - 1 === 1 ? "" : "s"} for this week.
+          </span>
+          <button
+            onClick={() => {
+              setDuplicateIndex((i) => (i + 1) % sortedDuplicates.length);
+              setEditing(null);
+              setPicker(null);
+            }}
+            aria-label={`Switch to next plan for this week (showing ${(duplicateIndex % sortedDuplicates.length) + 1} of ${sortedDuplicates.length})`}
+            className="ml-auto text-[12.5px] font-semibold underline hover:no-underline"
+          >
+            Switch
+          </button>
         </div>
+      )}
+
+      {!effectiveViewedPlan ? (
+        <>
+          <EmptyWeekCard
+            isPastWeek={isPastWeek}
+            weekLabel={monthLabel}
+            onCreate={handleNew}
+          />
+          <EmptyWeekGrid weekStart={weekStart} today={today} />
+        </>
       ) : (
         <>
           {/* mobile: horizontal scrollable strip; desktop: 7-col grid */}
           <div className="lg:grid lg:grid-cols-7 lg:gap-3 flex gap-3 overflow-x-auto amp-no-scrollbar -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0 snap-x snap-mandatory">
             {DAYS.map((day) => {
-              const meals = plan.plannedMeals.filter((m) => m.day === day);
+              const meals = effectiveViewedPlan.plannedMeals.filter((m) => m.day === day);
               const isToday = day === today;
               return (
                 <div
@@ -707,6 +836,67 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div className="flex flex-col gap-1.5">
       <div className="text-[11px] uppercase tracking-[0.08em] text-ink-3 font-semibold">{label}</div>
       {children}
+    </div>
+  );
+}
+
+function EmptyWeekCard({
+  isPastWeek,
+  weekLabel,
+  onCreate,
+}: {
+  isPastWeek: boolean;
+  weekLabel: string;
+  onCreate: () => void;
+}) {
+  if (isPastWeek) {
+    return (
+      <div className="rounded-[16px] border border-dashed border-line bg-surface-1 p-8 text-center">
+        <div className="text-[14px] text-ink-2">No plan recorded for this week.</div>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-[16px] border border-dashed border-line bg-surface-1 p-8 text-center flex flex-col items-center gap-3">
+      <div className="text-[14px] text-ink-2">No plan for this week yet.</div>
+      <Button variant="primary" icon={Plus} onClick={onCreate}>
+        Create plan for the week of {weekLabel}
+      </Button>
+    </div>
+  );
+}
+
+function EmptyWeekGrid({ weekStart, today }: { weekStart: string; today: string | null }) {
+  return (
+    <div aria-hidden="true" className="lg:grid lg:grid-cols-7 lg:gap-3 flex gap-3 overflow-x-auto amp-no-scrollbar -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0 snap-x snap-mandatory opacity-60">
+      {DAYS.map((day) => {
+        const isToday = day === today;
+        return (
+          <div
+            key={day}
+            className={`snap-start shrink-0 w-[72%] sm:w-[44%] lg:w-auto bg-surface-1 rounded-[14px] p-3 flex flex-col gap-2.5 min-h-[280px] border ${
+              isToday ? "border-accent" : "border-line-soft"
+            }`}
+          >
+            <div className="flex items-baseline justify-between">
+              <div>
+                <div className={`text-[11px] uppercase tracking-[0.08em] font-semibold ${isToday ? "text-accent-ink" : "text-ink-3"}`}>
+                  {DAY_LABELS[day]}
+                </div>
+                <div className="text-[20px] font-semibold text-ink-3 -tracking-[0.02em] mt-px">
+                  {dayDate(weekStart, day)}
+                </div>
+              </div>
+            </div>
+            {(["lunch", "dinner"] as const).map((slot) => (
+              <div key={slot} className="flex flex-col gap-1">
+                <div className="text-[10px] uppercase tracking-[0.08em] text-ink-3">{slot}</div>
+                <div className="border border-dashed border-line-soft rounded-[10px] py-4 bg-surface-2/40" />
+              </div>
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }
