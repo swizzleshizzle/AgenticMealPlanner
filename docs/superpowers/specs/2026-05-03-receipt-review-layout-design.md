@@ -133,9 +133,13 @@ visual states but unifies them under one cell shape:
   block, which lives outside the row's grid and looks orphaned.
 - The mini-form keeps its current fields and copy.
 
-**Unchecked rows** (`!isCommitted`) keep the current `opacity-50` on
-the inputs but the badge/button color stays full-saturation, so an
-uncheck-then-recheck pass remains scannable.
+**Unchecked rows** (`!isCommitted`) keep today's `opacity-50` on the
+whole `<li>` — unchanged from current behavior. (Badges-stay-bright
+was considered but cut: CSS opacity cascades through the parent
+compositing layer, so the only ways to deliver it would be to drop the
+parent opacity and explicitly dim each child cell, or use a non-opacity
+treatment. Not worth the complexity for the marginal UX gain; revisit
+if review-with-many-unchecks becomes a real workflow.)
 
 ## Field details
 
