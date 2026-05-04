@@ -453,7 +453,7 @@ function RowEditor({
       />
       <input
         type="text"
-        value={row.unit}
+        value={row.unit === "count" ? "ea" : row.unit}
         disabled={disabled || !row.isCommitted}
         onChange={(e) => onPatch({ unit: e.target.value })}
         className="h-8 w-20 md:w-full rounded-[8px] border border-line bg-surface-1 px-2 text-[12.5px] text-ink-1 focus:outline-none focus:border-accent disabled:opacity-50"
