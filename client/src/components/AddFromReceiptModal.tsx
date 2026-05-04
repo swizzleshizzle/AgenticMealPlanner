@@ -66,7 +66,7 @@ export default function AddFromReceiptModal({ onClose, onCommitted }: Props) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-surface-1 rounded-[16px] w-full max-w-[640px] max-h-[88vh] flex flex-col overflow-hidden border border-line"
+        className="bg-surface-1 rounded-[16px] w-full max-w-[640px] md:max-w-[1000px] max-h-[88vh] flex flex-col overflow-hidden border border-line"
         style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
       >
         <div className="flex items-start gap-3 px-4 sm:px-5 py-3.5 border-b border-line-soft">
