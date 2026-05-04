@@ -59,6 +59,12 @@ enum IngredientCategory {
   other
 }
 
+enum ReceiptSource {
+  paste
+  photo
+  pdf
+}
+
 model Meal {
   id          Int       @id @default(autoincrement())
   name        String
@@ -104,6 +110,7 @@ model Ingredient {
   mealIngredients MealIngredient[]
   pantryItems     PantryItem[]
   shoppingItems   ShoppingItem[]
+  receiptItems    ReceiptItem[]
 
   @@map("ingredients")
 }
@@ -181,4 +188,42 @@ model ShoppingItem {
 
   @@unique([planId, ingredientId])
   @@map("shopping_items")
+}
+
+model Receipt {
+  id          Int           @id @default(autoincrement())
+  source      ReceiptSource
+  sourcePath  String?       @map("source_path")
+  rawText     String?       @map("raw_text")
+  store       String
+  tripDate    DateTime      @map("trip_date") @db.Date
+  subtotal    Decimal?      @db.Decimal(10, 2)
+  tax         Decimal?      @db.Decimal(10, 2)
+  total       Decimal       @db.Decimal(10, 2)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  items ReceiptItem[]
+
+  @@map("receipts")
+}
+
+model ReceiptItem {
+  id             Int                 @id @default(autoincrement())
+  receiptId      Int                 @map("receipt_id")
+  rawName        String              @map("raw_name")
+  parsedName     String              @map("parsed_name")
+  ingredientId   Int?                @map("ingredient_id")
+  quantity       Decimal             @db.Decimal(10, 3)
+  unit           String
+  price          Decimal?            @db.Decimal(10, 2)
+  kind           String              // 'food' | 'non_food' | 'unknown' — kept as string to avoid an enum migration churn
+  categoryGuess  IngredientCategory? @map("category_guess")
+  locationGuess  PantryLocation?     @map("location_guess")
+  isCommitted    Boolean             @default(true) @map("is_committed")
+
+  receipt    Receipt     @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  ingredient Ingredient? @relation(fields: [ingredientId], references: [id])
+
+  @@map("receipt_items")
 }
