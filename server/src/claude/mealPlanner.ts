@@ -32,11 +32,18 @@ export async function generateWeeklyPlan(
   pantry: PantryOverview[],
   recentMealIds: number[],
 ): Promise<SuggestedPlan> {
-  const prompt = `You are a meal planning assistant. Generate a weekly meal plan (Monday-Sunday) for 2 people.
+  const prompt = `You are a meal planning assistant. Generate a weekly meal plan (Sunday → Saturday) for 2 people.
+
+Cook styles per slot:
+- "cook_fresh" — cooked the same day. Meal must have canFresh=true.
+- "batch_prep" — cooked Sunday only, in larger quantity. Meal must have canBatch=true. Set servings to 4 or more.
+- "leftovers" — eat from a previous batch_prep. No recipe-capability requirement; reuses the same mealId as the source batch_prep.
 
 Rules:
-- Sunday is the ONLY day that may contain batch-prep planned meals. Pick 2-3 meals with canBatch=true for Sunday (lunch and dinner slots), with isPrep=true.
-- Every other day (Monday-Saturday) must have isPrep=false and the meal must have canFresh=true.
+- Sunday is the prep day (day 1 of the plan). Sunday has two slots (lunch + dinner). Pick 1–2 batch_prep meals for Sunday with servings >= 4.
+- For each Sunday batch_prep meal you MAY fill 1–2 downstream slots (Mon–Wed) with cookStyle="leftovers" referencing the same mealId, servings=2. This reduces the shopping list and reuses the prep.
+- Every other slot is cookStyle="cook_fresh" and the meal must have canFresh=true.
+- batch_prep on any day other than Sunday is invalid; do not emit it.
 - Avoid meals used recently: ${JSON.stringify(recentMealIds)}
 - Prefer meals that use ingredients already in the pantry.
 - Balance nutrition and variety across the week.
@@ -53,10 +60,10 @@ Return ONLY valid JSON:
   "meals": [
     {
       "mealId": number,
-      "day": "monday|tuesday|wednesday|thursday|friday|saturday|sunday",
+      "day": "sunday|monday|tuesday|wednesday|thursday|friday|saturday",
       "mealSlot": "lunch|dinner",
       "servings": number,
-      "isPrep": boolean
+      "cookStyle": "cook_fresh" | "batch_prep" | "leftovers"
     }
   ]
 }`;
