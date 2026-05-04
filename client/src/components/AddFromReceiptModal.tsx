@@ -327,6 +327,17 @@ function ReviewStage({
           <div className="text-[11px] uppercase tracking-[0.08em] text-ink-3 font-semibold">
             Food items ({committedFoodCount}/{foodRows.length} selected)
           </div>
+          <div
+            className={`hidden sticky top-0 z-10 bg-surface-1 border-b border-line-soft px-3 py-1.5 text-[11px] uppercase tracking-[0.08em] text-ink-3 font-semibold ${RECEIPT_ROW_GRID}`}
+          >
+            <span aria-hidden />
+            <span>Item</span>
+            <span>Qty</span>
+            <span>Unit</span>
+            <span>Location</span>
+            <span>Expires</span>
+            <span className="text-right">Price</span>
+          </div>
           <ul className="flex flex-col gap-1.5">
             {foodRows.map((row) => (
               <RowEditor
