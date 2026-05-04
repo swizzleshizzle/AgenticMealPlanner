@@ -423,9 +423,11 @@ function RowEditor({
           <button
             onClick={() => onPatch({ showCreateForm: !row.showCreateForm })}
             disabled={disabled}
-            className="inline-flex items-center gap-1 text-[12px] text-accent-ink hover:underline"
+            title={`Create "${row.parsedName}"`}
+            className="flex items-center gap-1 max-w-full min-w-0 text-[12px] text-accent-ink hover:underline"
           >
-            <Plus size={12} /> Create &ldquo;{row.parsedName}&rdquo;
+            <Plus size={12} className="shrink-0" />
+            <span className="truncate">Create &ldquo;{row.parsedName}&rdquo;</span>
           </button>
         )}
       </div>
