@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { RefreshCw, CheckCircle2, Check, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   formatLocalDate,
@@ -76,6 +76,8 @@ export default function ShoppingList() {
 
   const todayWeek = useMemo(() => parseWeekParam(null), []);
   const isViewingToday = viewedWeek === todayWeek;
+  const isPastWeek = viewedWeek < todayWeek;
+  const navigate = useNavigate();
 
   const goPrevWeek = () => setSearchParams({ week: stepWeek(viewedWeek, -7) });
   const goNextWeek = () => setSearchParams({ week: stepWeek(viewedWeek, +7) });
@@ -90,6 +92,7 @@ export default function ShoppingList() {
   };
 
   const handleToggle = async (id: number, checked: boolean) => {
+    if (isPastWeek) return; // past weeks are strictly read-only
     await toggleItem(id, checked);
     setItems(items.map((i) => i.id === id ? { ...i, checked } : i));
   };
@@ -133,18 +136,27 @@ export default function ShoppingList() {
           </div>
           <h1 className="text-[26px] sm:text-[30px] font-semibold -tracking-[0.02em] text-ink-1">Shopping List</h1>
         </div>
-        {viewedPlan && (
+        {viewedPlan && !isPastWeek && items.length > 0 && (
           <Button variant="ghost" icon={RefreshCw} onClick={handleGenerate} disabled={generating}>
-            {generating ? "Regenerating…" : items.length ? "Regenerate" : "Generate"}
+            {generating ? "Regenerating…" : "Regenerate"}
           </Button>
         )}
       </div>
 
-      {!viewedPlan && (
-        <div className="rounded-[16px] border border-dashed border-line bg-surface-1 p-10 text-center text-ink-2">
-          No active plan. Create one in the Planner first.
-        </div>
-      )}
+      {!viewedPlan ? (
+        <NoPlanCard
+          isPastWeek={isPastWeek}
+          viewedWeek={viewedWeek}
+          monthLabel={monthLabel}
+          onGoToPlanner={() => navigate(`/planner?week=${viewedWeek}`)}
+        />
+      ) : items.length === 0 ? (
+        <NoListCard
+          isPastWeek={isPastWeek}
+          generating={generating}
+          onGenerate={handleGenerate}
+        />
+      ) : null}
 
       {toBuy.length > 0 && (
         <Section title="To buy" count={toBuy.length}>
@@ -154,7 +166,7 @@ export default function ShoppingList() {
                 {CATEGORY_LABELS[cat] ?? cat}
               </div>
               {list.map((item, i) => (
-                <Row key={item.id} item={item} onToggle={handleToggle} last={i === list.length - 1} />
+                <Row key={item.id} item={item} onToggle={handleToggle} last={i === list.length - 1} disabled={isPastWeek} />
               ))}
             </div>
           ))}
@@ -167,7 +179,7 @@ export default function ShoppingList() {
             <CheckCircle2 size={12} /> Already in pantry · {alreadyHave.length}
           </div>
           {alreadyHave.map((item, i) => (
-            <Row key={item.id} item={item} onToggle={handleToggle} last={i === alreadyHave.length - 1} muted />
+            <Row key={item.id} item={item} onToggle={handleToggle} last={i === alreadyHave.length - 1} muted disabled={isPastWeek} />
           ))}
         </div>
       )}
@@ -178,7 +190,7 @@ export default function ShoppingList() {
             Done · {done.length}
           </div>
           {done.map((item, i) => (
-            <Row key={item.id} item={item} onToggle={handleToggle} last={i === done.length - 1} strikethrough />
+            <Row key={item.id} item={item} onToggle={handleToggle} last={i === done.length - 1} strikethrough disabled={isPastWeek} />
           ))}
         </div>
       )}
@@ -199,17 +211,22 @@ function Section({ title, count, children }: { title: string; count: number; chi
 }
 
 function Row({
-  item, onToggle, last, muted, strikethrough,
+  item, onToggle, last, muted, strikethrough, disabled,
 }: {
   item: ShoppingItem;
   onToggle: (id: number, checked: boolean) => void;
   last: boolean;
   muted?: boolean;
   strikethrough?: boolean;
+  disabled?: boolean;
 }) {
+  // When disabled, render a plain <div> so the wrapper isn't clickable.
+  // The hidden <input> isn't rendered either — it can't be reached visually
+  // and it would be confusing to keep a tabbable disabled checkbox around.
+  const Wrapper: any = disabled ? "div" : "label";
   return (
-    <label
-      className={`grid grid-cols-[auto_1fr_auto] gap-3 items-center px-4 sm:px-5 py-3 cursor-pointer ${last ? "" : "border-b border-line-soft"}`}
+    <Wrapper
+      className={`grid grid-cols-[auto_1fr_auto] gap-3 items-center px-4 sm:px-5 py-3 ${disabled ? "cursor-not-allowed opacity-80" : "cursor-pointer"} ${last ? "" : "border-b border-line-soft"}`}
     >
       <span
         className="w-5 h-5 rounded-[6px] grid place-items-center"
@@ -221,12 +238,14 @@ function Row({
       >
         {item.checked && <Check size={13} strokeWidth={2.5} />}
       </span>
-      <input
-        type="checkbox"
-        checked={item.checked}
-        onChange={() => onToggle(item.id, !item.checked)}
-        className="hidden"
-      />
+      {!disabled && (
+        <input
+          type="checkbox"
+          checked={item.checked}
+          onChange={() => onToggle(item.id, !item.checked)}
+          className="hidden"
+        />
+      )}
       <div
         className={`text-[14px] ${muted ? "text-ink-2" : "text-ink-1"}`}
         style={{ textDecoration: strikethrough ? "line-through" : "none" }}
@@ -236,7 +255,7 @@ function Row({
       <div className="text-[12.5px] text-ink-3 tabular-nums">
         {item.quantityToBuy > 0 ? `${item.quantityToBuy} ${item.ingredient.defaultUnit ?? ""}` : `Have ${item.quantityNeeded} ${item.ingredient.defaultUnit ?? ""}`}
       </div>
-    </label>
+    </Wrapper>
   );
 }
 
@@ -247,4 +266,57 @@ function byCategory(list: ShoppingItem[]): [string, ShoppingItem[]][] {
     (g[c] = g[c] ?? []).push(i);
   }
   return Object.entries(g);
+}
+
+function NoPlanCard({
+  isPastWeek,
+  monthLabel,
+  onGoToPlanner,
+}: {
+  isPastWeek: boolean;
+  viewedWeek: string;
+  monthLabel: string;
+  onGoToPlanner: () => void;
+}) {
+  if (isPastWeek) {
+    return (
+      <div className="rounded-[16px] border border-dashed border-line bg-surface-1 p-8 text-center">
+        <div className="text-[14px] text-ink-2">No plan recorded for this week.</div>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-[16px] border border-dashed border-line bg-surface-1 p-8 text-center flex flex-col items-center gap-3">
+      <div className="text-[14px] text-ink-2">No plan for the week of {monthLabel}.</div>
+      <Button variant="ghost" onClick={onGoToPlanner}>
+        Create one in the Planner →
+      </Button>
+    </div>
+  );
+}
+
+function NoListCard({
+  isPastWeek,
+  generating,
+  onGenerate,
+}: {
+  isPastWeek: boolean;
+  generating: boolean;
+  onGenerate: () => void;
+}) {
+  if (isPastWeek) {
+    return (
+      <div className="rounded-[16px] border border-dashed border-line bg-surface-1 p-8 text-center">
+        <div className="text-[14px] text-ink-2">No shopping list for this week.</div>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-[16px] border border-dashed border-line bg-surface-1 p-8 text-center flex flex-col items-center gap-3">
+      <div className="text-[14px] text-ink-2">No shopping list yet.</div>
+      <Button variant="primary" icon={RefreshCw} onClick={onGenerate} disabled={generating}>
+        {generating ? "Generating…" : "Generate from this week's plan"}
+      </Button>
+    </div>
+  );
 }
