@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, Plus, Minus, CalendarDays, Flame, Leaf, ArrowRight } from "lucide-react";
+import { X, Plus, Minus, CalendarDays, Flame, Leaf, Refrigerator, ArrowRight } from "lucide-react";
 import {
   addPlannedMeal,
   getPlans,
-  getNextMonday,
+  getNextSunday,
   localMidnightFromISO,
   pickRelevantPlan,
   type WeeklyPlan,
@@ -13,9 +13,10 @@ import {
 import type { Meal } from "../api/meals";
 import Button from "./ui/Button";
 
-const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
+const DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
 type DayKey = typeof DAYS[number];
 type Slot = "lunch" | "dinner";
+type CookStyle = "cook_fresh" | "batch_prep" | "leftovers";
 
 const DAY_LABELS: Record<DayKey, string> = {
   monday: "Mon", tuesday: "Tue", wednesday: "Wed",
@@ -31,10 +32,10 @@ interface Props {
 export default function AddToPlanModal({ meal, onClose, onAdded }: Props) {
   const navigate = useNavigate();
   const [plans, setPlans] = useState<WeeklyPlan[] | null>(null);
-  const [day, setDay] = useState<DayKey>("monday");
+  const [day, setDay] = useState<DayKey>("sunday");
   const [slot, setSlot] = useState<Slot>("lunch");
   const [servings, setServings] = useState<number>(meal.servings || 2);
-  const [isPrep, setIsPrep] = useState<boolean>(false);
+  const [cookStyle, setCookStyle] = useState<CookStyle>("cook_fresh");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const defaultsApplied = useRef(false);
@@ -86,12 +87,12 @@ export default function AddToPlanModal({ meal, onClose, onAdded }: Props) {
         if (!occupiedByDay[d][s]) {
           setDay(d);
           setSlot(s);
-          setIsPrep(d === "sunday" && !!meal.canBatch);
+          setCookStyle(d === "sunday" && !!meal.canBatch ? "batch_prep" : "cook_fresh");
           return;
         }
       }
     }
-    // Every slot taken — leave Mon/lunch defaults. isPrep stays false.
+    // Every slot taken — leave defaults; cookStyle stays cook_fresh.
   }, [targetPlan, occupiedByDay, meal.canBatch]);
 
   const targetWeekLabel = useMemo(() => {
@@ -114,7 +115,7 @@ export default function AddToPlanModal({ meal, onClose, onAdded }: Props) {
         day,
         mealSlot: slot,
         servings,
-        isPrep,
+        cookStyle,
       });
       onAdded(pm as PlannedMeal);
       onClose();
@@ -258,17 +259,18 @@ export default function AddToPlanModal({ meal, onClose, onAdded }: Props) {
               </Field>
 
               <Field label="Cook style">
-                <div className="flex gap-1.5">
+                <div className="flex gap-1.5 flex-wrap">
                   {([
-                    { value: false, label: "Cook fresh", Icon: Leaf },
-                    { value: true,  label: "Batch prep", Icon: Flame },
+                    { value: "cook_fresh", label: "Cook fresh", Icon: Leaf },
+                    { value: "batch_prep", label: "Batch prep", Icon: Flame },
+                    { value: "leftovers",  label: "Leftovers",  Icon: Refrigerator },
                   ] as const).map(({ value, label, Icon }) => {
-                    const active = isPrep === value;
+                    const active = cookStyle === value;
                     return (
                       <button
-                        key={String(value)}
+                        key={value}
                         disabled={submitting}
-                        onClick={() => setIsPrep(value)}
+                        onClick={() => setCookStyle(value)}
                         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[12.5px] border transition ${
                           active
                             ? "bg-accent text-accent-on border-accent"
@@ -311,8 +313,8 @@ function NoPlanBody({
   onGoToPlanner: () => void;
   onCancel: () => void;
 }) {
-  const nextMondayLabel = useMemo(() => {
-    const iso = getNextMonday();
+  const nextSundayLabel = useMemo(() => {
+    const iso = getNextSunday();
     return localMidnightFromISO(iso).toLocaleDateString(undefined, {
       weekday: "long", month: "long", day: "numeric",
     });
@@ -326,7 +328,7 @@ function NoPlanBody({
         </div>
         <div className="text-[15px] font-semibold text-ink-1">No active plan yet</div>
         <div className="text-[13px] text-ink-2 leading-relaxed max-w-[320px]">
-          The next plan would start {nextMondayLabel}. Head to the planner to set it up.
+          The next plan would start {nextSundayLabel}. Head to the planner to set it up.
         </div>
       </div>
       <div className="flex items-center justify-end gap-2 px-4 sm:px-5 py-3 border-t border-line-soft bg-surface-2">
