@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Flame,
   Leaf,
+  Refrigerator,
   Plus,
   Check,
   Search,
@@ -38,14 +39,14 @@ import Button from "../components/ui/Button";
 import PhotoTile from "../components/ui/PhotoTile";
 import { toneForMeal } from "../theme/photoTone";
 
-const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
+const DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
 const DAY_LABELS: Record<string, string> = {
   monday: "Mon", tuesday: "Tue", wednesday: "Wed",
   thursday: "Thu", friday: "Fri", saturday: "Sat", sunday: "Sun",
 };
 
 function todayKey(): string {
-  return DAYS[(new Date().getDay() + 6) % 7];
+  return DAYS[new Date().getDay()];
 }
 
 function dayDate(weekStart: string, dayKey: string): number {
@@ -147,7 +148,7 @@ export default function Planner() {
         day: picker.day,
         mealSlot: picker.slot,
         servings: meal?.servings ?? 2,
-        isPrep: canBatchHere,
+        cookStyle: canBatchHere ? "batch_prep" : "cook_fresh",
       });
       setPlans((prev) =>
         prev.map((p) =>
@@ -230,11 +231,12 @@ export default function Planner() {
 
   const summary = useMemo(() => {
     if (!effectiveViewedPlan) return null;
-    const prep = effectiveViewedPlan.plannedMeals.filter((m) => m.isPrep && m.status !== "skipped").length;
-    const fresh = effectiveViewedPlan.plannedMeals.filter((m) => !m.isPrep && m.status !== "skipped").length;
+    const active = effectiveViewedPlan.plannedMeals.filter((m) => m.status !== "skipped");
+    const prep = active.filter((m) => m.cookStyle === "batch_prep").length;
+    const fresh = active.filter((m) => m.cookStyle === "cook_fresh").length;
+    const leftover = active.filter((m) => m.cookStyle === "leftovers").length;
     let totalProtein = 0, count = 0;
-    for (const pm of effectiveViewedPlan.plannedMeals) {
-      if (pm.status === "skipped") continue;
+    for (const pm of active) {
       const scale = pm.servings / (pm.meal.servings || 1);
       if (pm.meal.proteinG) {
         totalProtein += pm.meal.proteinG * scale;
@@ -242,7 +244,7 @@ export default function Planner() {
       }
     }
     const avgProtein = count > 0 ? Math.round(totalProtein / count) : 0;
-    return { prep, fresh, avgProtein };
+    return { prep, fresh, leftover, avgProtein };
   }, [effectiveViewedPlan]);
 
   return (
@@ -389,8 +391,9 @@ export default function Planner() {
                               {pm.meal.name}
                             </div>
                             <div className="flex items-center gap-1 mt-1 text-[10.5px] text-ink-3">
-                              {pm.isPrep ? <Flame size={10} /> : <Leaf size={10} />}
-                              {pm.isPrep ? "Prep" : "Fresh"}
+                              {pm.cookStyle === "batch_prep" && <><Flame size={10} /> Prep</>}
+                              {pm.cookStyle === "cook_fresh" && <><Leaf size={10} /> Fresh</>}
+                              {pm.cookStyle === "leftovers"  && <><Refrigerator size={10} /> Leftovers</>}
                               <span>·</span><span>{pm.servings}×</span>
                               {pm.status === "cooked" && (
                                 <>
@@ -429,7 +432,7 @@ export default function Planner() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-[13.5px] font-semibold text-ink-1">
-                  Plan looks balanced — {summary.prep} batch-prep session{summary.prep !== 1 ? "s" : ""}, {summary.fresh} fresh cook{summary.fresh !== 1 ? "s" : ""}{summary.avgProtein > 0 ? `, ${summary.avgProtein}g avg protein per meal` : ""}.
+                  Plan looks balanced — {summary.prep} batch-prep session{summary.prep !== 1 ? "s" : ""}, {summary.fresh} fresh cook{summary.fresh !== 1 ? "s" : ""}{summary.leftover > 0 ? `, ${summary.leftover} leftover meal${summary.leftover !== 1 ? "s" : ""}` : ""}{summary.avgProtein > 0 ? `, ${summary.avgProtein}g avg protein per meal` : ""}.
                 </div>
                 <div className="text-[12px] text-ink-3 mt-0.5">
                   Adjust anything from chat, or sync to your calendar when ready.
@@ -763,17 +766,18 @@ function PlannedMealEditModal({
           </Field>
 
           <Field label="Cook style">
-            <div className="flex gap-1.5">
+            <div className="flex gap-1.5 flex-wrap">
               {([
-                { value: false, label: "Cook fresh", Icon: Leaf },
-                { value: true,  label: "Batch prep", Icon: Flame },
+                { value: "cook_fresh", label: "Cook fresh", Icon: Leaf },
+                { value: "batch_prep", label: "Batch prep", Icon: Flame },
+                { value: "leftovers",  label: "Leftovers",  Icon: Refrigerator },
               ] as const).map(({ value, label, Icon }) => {
-                const active = pm.isPrep === value;
+                const active = pm.cookStyle === value;
                 return (
                   <button
-                    key={String(value)}
+                    key={value}
                     disabled={busy || active}
-                    onClick={() => guarded(() => onChange({ isPrep: value }))}
+                    onClick={() => guarded(() => onChange({ cookStyle: value }))}
                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[12.5px] border transition ${
                       active
                         ? "bg-accent text-accent-on border-accent"
