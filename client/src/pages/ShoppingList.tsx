@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { RefreshCw, CheckCircle2, Check } from "lucide-react";
-import { getPlans, type WeeklyPlan } from "../api/plans";
+import {
+  getPlans,
+  localMidnightFromISO,
+  parseWeekParam,
+  pickPlanForWeek,
+  type WeeklyPlan,
+} from "../api/plans";
 import {
   generateShoppingList,
   getShoppingList,
@@ -22,23 +29,49 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export default function ShoppingList() {
-  const [plan, setPlan] = useState<WeeklyPlan | null>(null);
+  const [plans, setPlans] = useState<WeeklyPlan[]>([]);
   const [items, setItems] = useState<ShoppingItem[]>([]);
   const [generating, setGenerating] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // The viewed week is the URL's source of truth. parseWeekParam normalizes
+  // mid-week dates, garbage strings, or a missing param to a Sunday in
+  // local time.
+  const rawWeekParam = searchParams.get("week");
+  const viewedWeek = parseWeekParam(rawWeekParam);
+
+  // If the URL was missing or non-canonical, replace it (don't push) so the
+  // initial-load redirect doesn't pollute browser history.
+  useEffect(() => {
+    if (rawWeekParam !== viewedWeek) {
+      setSearchParams({ week: viewedWeek }, { replace: true });
+    }
+  }, [rawWeekParam, viewedWeek, setSearchParams]);
 
   useEffect(() => {
-    getPlans().then((plans) => {
-      const active = plans.find((p) => p.status === "active") ?? plans[0] ?? null;
-      setPlan(active);
-      if (active) getShoppingList(active.id).then(setItems).catch(() => setItems([]));
-    });
+    getPlans().then(setPlans).catch(() => setPlans([]));
   }, []);
 
+  const viewedPlan = useMemo(
+    () => pickPlanForWeek(plans, viewedWeek),
+    [plans, viewedWeek],
+  );
+
+  // Refetch items when viewedPlan.id changes (or when it goes from null to
+  // non-null on initial plans load).
+  useEffect(() => {
+    if (!viewedPlan) {
+      setItems([]);
+      return;
+    }
+    getShoppingList(viewedPlan.id).then(setItems).catch(() => setItems([]));
+  }, [viewedPlan?.id]);
+
   const handleGenerate = async () => {
-    if (!plan) return;
+    if (!viewedPlan) return;
     setGenerating(true);
     try {
-      setItems(await generateShoppingList(plan.id));
+      setItems(await generateShoppingList(viewedPlan.id));
     } finally { setGenerating(false); }
   };
 
@@ -51,29 +84,26 @@ export default function ShoppingList() {
   const alreadyHave = useMemo(() => items.filter((i) => !i.checked && i.quantityToBuy === 0), [items]);
   const done = useMemo(() => items.filter((i) => i.checked), [items]);
 
-  const monthLabel = plan?.weekStartDate
-    ? new Date(plan.weekStartDate + "T00:00:00").toLocaleDateString(undefined, { month: "long", day: "numeric" })
-    : null;
+  const monthLabel = localMidnightFromISO(viewedWeek)
+    .toLocaleDateString(undefined, { month: "long", day: "numeric" });
 
   return (
     <div className="flex flex-col gap-7 max-w-[720px]">
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
-          {monthLabel && (
-            <div className="text-[12px] uppercase tracking-[0.1em] text-ink-3 mb-1.5">
-              Week of {monthLabel} · {toBuy.length} to buy
-            </div>
-          )}
+          <div className="text-[12px] uppercase tracking-[0.1em] text-ink-3 mb-1.5">
+            Week of {monthLabel} · {toBuy.length} to buy
+          </div>
           <h1 className="text-[26px] sm:text-[30px] font-semibold -tracking-[0.02em] text-ink-1">Shopping List</h1>
         </div>
-        {plan && (
+        {viewedPlan && (
           <Button variant="ghost" icon={RefreshCw} onClick={handleGenerate} disabled={generating}>
             {generating ? "Regenerating…" : items.length ? "Regenerate" : "Generate"}
           </Button>
         )}
       </div>
 
-      {!plan && (
+      {!viewedPlan && (
         <div className="rounded-[16px] border border-dashed border-line bg-surface-1 p-10 text-center text-ink-2">
           No active plan. Create one in the Planner first.
         </div>
