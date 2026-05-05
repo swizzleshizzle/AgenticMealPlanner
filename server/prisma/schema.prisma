@@ -47,6 +47,12 @@ enum MealSlot {
   dinner
 }
 
+enum CookStyle {
+  cook_fresh
+  batch_prep
+  leftovers
+}
+
 enum IngredientCategory {
   produce
   protein
@@ -157,14 +163,14 @@ model WeeklyPlan {
 }
 
 model PlannedMeal {
-  id       Int               @id @default(autoincrement())
-  planId   Int               @map("plan_id")
-  mealId   Int               @map("meal_id")
-  day      DayOfWeek
-  mealSlot MealSlot          @map("meal_slot")
-  servings Int               @default(2)
-  isPrep   Boolean           @default(false) @map("is_prep")
-  status   PlannedMealStatus @default(planned)
+  id        Int               @id @default(autoincrement())
+  planId    Int               @map("plan_id")
+  mealId    Int               @map("meal_id")
+  day       DayOfWeek
+  mealSlot  MealSlot          @map("meal_slot")
+  servings  Int               @default(2)
+  cookStyle CookStyle         @default(cook_fresh) @map("cook_style")
+  status    PlannedMealStatus @default(planned)
 
   calendarEventId String? @map("calendar_event_id")
 

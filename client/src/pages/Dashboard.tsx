@@ -30,7 +30,7 @@ import SectionHead from "../components/ui/SectionHead";
 import Button from "../components/ui/Button";
 import { toneForMeal } from "../theme/photoTone";
 
-const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
+const DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
 const DAY_LONG: Record<string, string> = {
   monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday",
   thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday",
@@ -41,9 +41,8 @@ const DAY_LABELS: Record<string, string> = {
 };
 
 function todayKey(): string {
-  // map JS getDay (0=Sun) to monday-first key
-  const d = new Date().getDay();
-  return DAYS[(d + 6) % 7];
+  // DAYS is Sunday-first, matches JS getDay (0=Sun) directly.
+  return DAYS[new Date().getDay()];
 }
 
 function expiresInDays(item: PantryItem): number | null {
@@ -212,9 +211,14 @@ export default function Dashboard() {
               <Pill tone="accent" size="md">
                 <Sparkles size={12} /> Tonight's dinner
               </Pill>
-              <Pill tone={tonight.isPrep ? "prep" : "fresh"} size="md">
-                {tonight.isPrep ? <Flame size={12} /> : <Leaf size={12} />}
-                {tonight.isPrep ? "From Sunday prep" : "Cook fresh"}
+              <Pill tone={
+                tonight.cookStyle === "batch_prep" ? "prep" :
+                tonight.cookStyle === "leftovers"  ? "prep" :
+                "fresh"
+              } size="md">
+                {tonight.cookStyle === "batch_prep" && <><Flame size={12} /> From Sunday prep</>}
+                {tonight.cookStyle === "leftovers"  && <><Refrigerator size={12} /> Leftovers</>}
+                {tonight.cookStyle === "cook_fresh" && <><Leaf size={12} /> Cook fresh</>}
               </Pill>
               {tonight.status === "cooked" && (
                 <Pill tone="accent" size="md">
@@ -240,7 +244,7 @@ export default function Dashboard() {
               </span>
               {tonight.meal.calories && <span>{tonight.meal.calories} cal</span>}
             </div>
-            {tonight.isPrep && tonight.status !== "cooked" && (
+            {(tonight.cookStyle === "batch_prep" || tonight.cookStyle === "leftovers") && tonight.status !== "cooked" && (
               <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-[10px] bg-prep-soft border border-prep-line text-prep-ink text-[13px]">
                 <Refrigerator size={16} />
                 <span>Pull from the fridge — reheat covered, ~5 min at 350°F.</span>
@@ -332,15 +336,19 @@ export default function Dashboard() {
                           <div className="min-w-0">
                             <div className="text-[14px] text-ink-1 font-medium truncate">{dinner.meal.name}</div>
                             <div className="text-[12px] text-ink-3">
-                              {dinner.isPrep ? "From prep" : "Cook fresh"} · {dinner.servings} servings
+                              {dinner.cookStyle === "batch_prep" && "From prep"}
+                              {dinner.cookStyle === "leftovers"  && "Leftovers"}
+                              {dinner.cookStyle === "cook_fresh" && "Cook fresh"}
+                              {" · "}{dinner.servings} servings
                             </div>
                           </div>
                         ) : (
                           <div className="text-[13px] text-ink-3 italic">Open night</div>
                         )}
-                        <Pill tone={dinner?.isPrep ? "prep" : "fresh"} size="sm">
-                          {dinner?.isPrep ? <Flame size={10} /> : <Leaf size={10} />}
-                          {dinner?.isPrep ? "Prep" : "Fresh"}
+                        <Pill tone={dinner && dinner.cookStyle !== "cook_fresh" ? "prep" : "fresh"} size="sm">
+                          {dinner?.cookStyle === "batch_prep" && <><Flame size={10} /> Prep</>}
+                          {dinner?.cookStyle === "leftovers"  && <><Refrigerator size={10} /> Leftovers</>}
+                          {(!dinner || dinner.cookStyle === "cook_fresh") && <><Leaf size={10} /> Fresh</>}
                         </Pill>
                       </div>
                     );
