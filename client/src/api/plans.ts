@@ -7,7 +7,7 @@ export interface PlannedMeal {
   day: string;
   mealSlot: string;
   servings: number;
-  isPrep: boolean;
+  cookStyle: "cook_fresh" | "batch_prep" | "leftovers";
   status: string;
   meal: Meal;
 }
@@ -54,15 +54,15 @@ export function formatLocalDate(d: Date): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-export function getNextMonday(): string {
-  // Upcoming Monday on-or-after today, formatted YYYY-MM-DD in local time.
-  // Called on a Monday → returns today.
+export function getNextSunday(): string {
+  // Upcoming Sunday on-or-after today, formatted YYYY-MM-DD in local time.
+  // Called on a Sunday → returns today.
   const now = new Date();
   const day = now.getDay();
-  const diff = (8 - day) % 7;
-  const monday = new Date(now);
-  monday.setDate(now.getDate() + diff);
-  return formatLocalDate(monday);
+  const diff = (7 - day) % 7;
+  const sunday = new Date(now);
+  sunday.setDate(now.getDate() + diff);
+  return formatLocalDate(sunday);
 }
 
 function planCoversToday(plan: WeeklyPlan): boolean {
@@ -101,31 +101,30 @@ export function pickRelevantPlan(plans: WeeklyPlan[]): WeeklyPlan | null {
 }
 
 /**
- * Normalize an arbitrary week-param string to a 'YYYY-MM-DD' Monday in local
+ * Normalize an arbitrary week-param string to a 'YYYY-MM-DD' Sunday in local
  * time. Used to make the viewed-week URL canonical regardless of how the
  * user landed on the page.
  *
- *   - Valid 'YYYY-MM-DD' that's already a Monday → unchanged.
+ *   - Valid 'YYYY-MM-DD' that's already a Sunday → unchanged.
  *   - Valid 'YYYY-MM-DD' on any other day        → snaps to that calendar
- *                                                   week's Monday.
- *   - Empty / null / undefined / unparseable     → today's Monday.
+ *                                                   week's Sunday (start).
+ *   - Empty / null / undefined / unparseable     → today's Sunday.
  */
 export function parseWeekParam(raw: string | null | undefined): string {
   let d: Date;
   if (!raw) {
     d = new Date();
   } else {
-    // Accept either 'YYYY-MM-DD' or a longer ISO string; treat as local midnight.
     const ymd = raw.length >= 10 ? raw.slice(0, 10) : raw;
     const tryDate = new Date(ymd + "T00:00:00");
     d = Number.isNaN(tryDate.getTime()) ? new Date() : tryDate;
   }
-  // JS getDay(): 0 = Sunday … 6 = Saturday. We want Monday-anchored weeks
-  // where Monday = 0 and Sunday = 6.
-  const dayIndex = (d.getDay() + 6) % 7;
-  const monday = new Date(d);
-  monday.setDate(d.getDate() - dayIndex);
-  return formatLocalDate(monday);
+  // JS getDay(): 0 = Sunday … 6 = Saturday. Sunday-anchored weeks make
+  // Sunday = 0 directly.
+  const dayIndex = d.getDay();
+  const sunday = new Date(d);
+  sunday.setDate(d.getDate() - dayIndex);
+  return formatLocalDate(sunday);
 }
 
 /**
