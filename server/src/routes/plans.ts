@@ -91,7 +91,7 @@ router.post("/:id/generate", async (req, res) => {
         day: meal.day,
         mealSlot: meal.mealSlot,
         servings: meal.servings,
-        isPrep: meal.isPrep,
+        cookStyle: meal.cookStyle,
       });
     }
 

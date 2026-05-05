@@ -2,55 +2,105 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-export async function generateShoppingList(planId: number) {
-  // Clear existing list for this plan
-  await prisma.shoppingItem.deleteMany({ where: { planId } });
+export interface AggregateInput {
+  plannedMeals: Array<{
+    cookStyle: "cook_fresh" | "batch_prep" | "leftovers";
+    servings: number;
+    meal: {
+      servings: number;
+      ingredients: Array<{
+        ingredientId: number;
+        quantity: number;
+        unit: string;
+      }>;
+    };
+  }>;
+  pantryItems: Array<{
+    ingredientId: number;
+    quantity: number;
+  }>;
+}
 
-  // Get all planned meals with their ingredients
-  const plannedMeals = await prisma.plannedMeal.findMany({
-    where: { planId, status: { in: ["planned", "cooked"] } },
-    include: { meal: { include: { ingredients: true } } },
-  });
+export interface AggregateOutput {
+  ingredientId: number;
+  quantityNeeded: number;
+  quantityOnHand: number;
+  quantityToBuy: number;
+}
 
-  // Aggregate needed quantities per ingredient
-  const needed = new Map<number, { quantity: number; unit: string }>();
+// Pure aggregation: given planned meals and pantry on-hand quantities, produce
+// the per-ingredient totals. Leftovers occurrences are excluded entirely
+// (their ingredients were already accounted for by the source batch_prep on
+// Sunday). The pantry on-hand is subtracted from the need to compute
+// quantityToBuy, clamped at zero.
+export function aggregateShoppingItems(input: AggregateInput): AggregateOutput[] {
+  const needed = new Map<number, number>();
 
-  for (const pm of plannedMeals) {
+  for (const pm of input.plannedMeals) {
+    if (pm.cookStyle === "leftovers") continue;
     const scaleFactor = pm.servings / pm.meal.servings;
     for (const mi of pm.meal.ingredients) {
-      const existing = needed.get(mi.ingredientId);
       const qty = mi.quantity * scaleFactor;
-      if (existing) {
-        existing.quantity += qty;
-      } else {
-        needed.set(mi.ingredientId, { quantity: qty, unit: mi.unit });
-      }
+      needed.set(mi.ingredientId, (needed.get(mi.ingredientId) ?? 0) + qty);
     }
   }
 
-  // Get pantry quantities
-  const pantryItems = await prisma.pantryItem.findMany();
   const onHand = new Map<number, number>();
-  for (const item of pantryItems) {
-    onHand.set(item.ingredientId, (onHand.get(item.ingredientId) || 0) + item.quantity);
+  for (const item of input.pantryItems) {
+    onHand.set(item.ingredientId, (onHand.get(item.ingredientId) ?? 0) + item.quantity);
   }
 
-  // Create shopping items
-  const items = [];
-  for (const [ingredientId, { quantity }] of needed) {
-    const qtyOnHand = onHand.get(ingredientId) || 0;
-    const qtyToBuy = Math.max(0, quantity - qtyOnHand);
+  const out: AggregateOutput[] = [];
+  for (const [ingredientId, quantityNeeded] of needed) {
+    const quantityOnHand = onHand.get(ingredientId) ?? 0;
+    const quantityToBuy = Math.max(0, quantityNeeded - quantityOnHand);
+    out.push({ ingredientId, quantityNeeded, quantityOnHand, quantityToBuy });
+  }
+  return out;
+}
 
-    items.push({
+export async function generateShoppingList(planId: number) {
+  await prisma.shoppingItem.deleteMany({ where: { planId } });
+
+  const plannedMeals = await prisma.plannedMeal.findMany({
+    where: {
       planId,
-      ingredientId,
-      quantityNeeded: quantity,
-      quantityOnHand: qtyOnHand,
-      quantityToBuy: qtyToBuy,
-    });
-  }
+      status: { in: ["planned", "cooked"] },
+      cookStyle: { not: "leftovers" },
+    },
+    include: { meal: { include: { ingredients: true } } },
+  });
 
-  await prisma.shoppingItem.createMany({ data: items });
+  const pantryItems = await prisma.pantryItem.findMany();
+
+  const aggregated = aggregateShoppingItems({
+    plannedMeals: plannedMeals.map((pm) => ({
+      cookStyle: pm.cookStyle,
+      servings: pm.servings,
+      meal: {
+        servings: pm.meal.servings,
+        ingredients: pm.meal.ingredients.map((mi) => ({
+          ingredientId: mi.ingredientId,
+          quantity: mi.quantity,
+          unit: mi.unit,
+        })),
+      },
+    })),
+    pantryItems: pantryItems.map((p) => ({
+      ingredientId: p.ingredientId,
+      quantity: p.quantity,
+    })),
+  });
+
+  await prisma.shoppingItem.createMany({
+    data: aggregated.map((a) => ({
+      planId,
+      ingredientId: a.ingredientId,
+      quantityNeeded: a.quantityNeeded,
+      quantityOnHand: a.quantityOnHand,
+      quantityToBuy: a.quantityToBuy,
+    })),
+  });
 
   return prisma.shoppingItem.findMany({
     where: { planId },

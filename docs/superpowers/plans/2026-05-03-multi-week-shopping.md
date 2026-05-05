@@ -150,7 +150,7 @@ export default function ShoppingList() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // The viewed week is the URL's source of truth. parseWeekParam normalizes
-  // mid-week dates, garbage strings, or a missing param to a Monday in
+  // mid-week dates, garbage strings, or a missing param to a Sunday in
   // local time.
   const rawWeekParam = searchParams.get("week");
   const viewedWeek = parseWeekParam(rawWeekParam);
@@ -238,7 +238,7 @@ Replace with:
     .toLocaleDateString(undefined, { month: "long", day: "numeric" });
 ```
 
-`viewedWeek` is always a canonical YYYY-MM-DD Monday, so the label is always valid (no `null` case). The label now derives from the URL, not from an optional plan, so it still renders correctly on weeks with no plan.
+`viewedWeek` is always a canonical YYYY-MM-DD Sunday, so the label is always valid (no `null` case). The label now derives from the URL, not from an optional plan, so it still renders correctly on weeks with no plan.
 
 - [ ] **Step 5: Update the JSX to use `viewedPlan` instead of `plan`**
 
@@ -792,17 +792,17 @@ No code changes — exercise each flow against the dev server.
 
 - [ ] **Smoke 1 — broken-date fix + initial load + URL canonicalization**
 
-1. Navigate to `/shopping` (no query string). Verify the URL becomes `/shopping?week=<this Monday>` (replace, not push).
-2. Verify the header reads `Week of <readable date>` — e.g., `Week of May 4`. **Confirm it is not "Invalid Date"** (the bug being fixed).
-3. Navigate to `/shopping?week=2026-05-13` (a Wednesday). Verify the URL silently snaps to `/shopping?week=2026-05-11`.
-4. Navigate to `/shopping?week=garbage`. Verify the URL silently lands on `?week=<this Monday>`.
+1. Navigate to `/shopping` (no query string). Verify the URL becomes `/shopping?week=<this Sunday>` (replace, not push).
+2. Verify the header reads `Week of <readable date>` — e.g., `Week of May 3`. **Confirm it is not "Invalid Date"** (the bug being fixed).
+3. Navigate to `/shopping?week=2026-05-13` (a Wednesday). Verify the URL silently snaps to `/shopping?week=2026-05-10` (the Sunday of that calendar week).
+4. Navigate to `/shopping?week=garbage`. Verify the URL silently lands on `?week=<this Sunday>`.
 
 - [ ] **Smoke 2 — prev / next / Today navigation**
 
-1. From the current week, click `›`. URL becomes `?week=<next Monday>`. Browser back returns to the current week.
+1. From the current week, click `›`. URL becomes `?week=<next Sunday>`. Browser back returns to the current week.
 2. Click `›` several more times. Each click pushes a new history entry.
 3. Click `‹` repeatedly. Walks backward through visited weeks.
-4. Click **Today**. URL snaps to `?week=<this Monday>`. Today button greys out.
+4. Click **Today**. URL snaps to `?week=<this Sunday>`. Today button greys out.
 5. Click **Today** again — nothing happens (button is disabled).
 
 - [ ] **Smoke 3 — empty current/future week, plan exists but no list**
@@ -814,9 +814,9 @@ No code changes — exercise each flow against the dev server.
 
 - [ ] **Smoke 4 — empty current/future week, no plan**
 
-1. Navigate to a current/future week with no plan (e.g., `?week=<5 weeks from this Monday>`).
+1. Navigate to a current/future week with no plan (e.g., `?week=<5 weeks from this Sunday>`).
 2. Verify the body shows `No plan for the week of <date>.` with a `Create one in the Planner →` button.
-3. Click the button. Verify it navigates to `/planner?week=<that Monday>` (carries the viewed week through, so the planner lands on the same week).
+3. Click the button. Verify it navigates to `/planner?week=<that Sunday>` (carries the viewed week through, so the planner lands on the same week).
 
 - [ ] **Smoke 5 — past week, list exists, read-only**
 
@@ -864,7 +864,7 @@ git push -u origin feature/multi-week-shopping
 gh pr create --base master --title "feat: multi-week navigation on the Shopping List + broken-date fix" --body "$(cat <<'EOF'
 ## Summary
 
-- Replace the Shopping List's "active plan or first plan" auto-pick with URL-driven multi-week navigation. The viewed week lives in `?week=YYYY-MM-DD` (always a Monday). Same pattern as the planner — `parseWeekParam` + `pickPlanForWeek` from `api/plans.ts`.
+- Replace the Shopping List's "active plan or first plan" auto-pick with URL-driven multi-week navigation. The viewed week lives in `?week=YYYY-MM-DD` (always a Sunday). Same pattern as the planner — `parseWeekParam` + `pickPlanForWeek` from `api/plans.ts`.
 - Add prev / next / Today buttons in the page header. Initial load with no `?week=` redirects (replace) to the current week.
 - Six-state body matrix: past weeks are read-only (disabled checkboxes, no Generate button at all); current/future weeks show the existing items UI when a list is generated, a `Generate from this week's plan` CTA when only the plan exists, and a `Create one in the Planner →` link (carrying `?week=`) when no plan exists.
 - Fix the broken `Week of <date>` header — was rendering "Invalid Date" because the code concatenated `"T00:00:00"` onto an already-ISO string. Now derives from `viewedWeek` via `localMidnightFromISO`.

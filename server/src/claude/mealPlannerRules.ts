@@ -3,7 +3,7 @@ export interface PlannedMealCandidate {
   day: string;
   mealSlot: string;
   servings: number;
-  isPrep: boolean;
+  cookStyle: "cook_fresh" | "batch_prep" | "leftovers";
 }
 
 export interface MealCapability {
@@ -12,9 +12,10 @@ export interface MealCapability {
   canFresh: boolean;
 }
 
-// Enforces the Sunday-only batch rule after Claude returns a suggested plan:
-//  - isPrep=true is permitted only when day="sunday" and the meal canBatch.
-//  - isPrep=false requires the meal canFresh.
+// Validates a Claude-suggested plan against the cook-style rules:
+//  - batch_prep is permitted only when day="sunday" and the meal canBatch.
+//  - cook_fresh requires the meal canFresh.
+//  - leftovers is accepted on any day with any meal capability.
 //  - Unknown mealIds are dropped.
 export function filterValidPlannedMeals(
   planned: PlannedMealCandidate[],
@@ -23,9 +24,10 @@ export function filterValidPlannedMeals(
   return planned.filter((pm) => {
     const meal = mealsById[pm.mealId];
     if (!meal) return false;
-    if (pm.isPrep) {
-      return pm.day === "sunday" && meal.canBatch;
+    switch (pm.cookStyle) {
+      case "batch_prep": return pm.day === "sunday" && meal.canBatch;
+      case "leftovers":  return true;
+      case "cook_fresh": return meal.canFresh;
     }
-    return meal.canFresh;
   });
 }
