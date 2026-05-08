@@ -8,17 +8,25 @@ import SpendingStrip from "../components/SpendingStrip";
 import RecentReceiptsStrip from "../components/RecentReceiptsStrip";
 import PantryCardComp from "../components/pantry/PantryCard";
 import FilterChips from "../components/pantry/FilterChips";
+import PantryDrawer from "../components/pantry/PantryDrawer";
 
 export default function Pantry() {
   const [cards, setCards] = useState<PantryCard[]>([]);
   const [query, setQuery] = useState<PantryQuery>({ sort: "name" });
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [receiptRefreshKey, setReceiptRefreshKey] = useState(0);
+  const [openCard, setOpenCard] = useState<PantryCard | null>(null);
 
   const load = () => {
     getPantry(query).then(setCards).catch(() => setCards([]));
   };
   useEffect(load, [JSON.stringify(query), receiptRefreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!openCard) return;
+    const fresh = cards.find((c) => c.ingredient.id === openCard.ingredient.id);
+    if (fresh) setOpenCard(fresh);
+  }, [cards]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalItems = cards.reduce((acc, c) => acc + c.batchCount, 0);
 
@@ -56,10 +64,12 @@ export default function Pantry() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
           {cards.map((c) => (
-            <PantryCardComp key={c.ingredient.id} card={c} onOpen={() => { /* drawer — Task 17 */ }} />
+            <PantryCardComp key={c.ingredient.id} card={c} onOpen={() => setOpenCard(c)} />
           ))}
         </div>
       )}
+
+      <PantryDrawer card={openCard} onClose={() => setOpenCard(null)} onChanged={load} />
 
       {showReceiptModal && (
         <AddFromReceiptModal
