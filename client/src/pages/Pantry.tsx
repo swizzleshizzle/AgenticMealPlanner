@@ -4,6 +4,7 @@ import { Plus, Receipt as ReceiptIcon } from "lucide-react";
 import { getPantry, type PantryCard, type PantryQuery } from "../api/pantry";
 import Button from "../components/ui/Button";
 import AddFromReceiptModal from "../components/AddFromReceiptModal";
+import AddItemModal from "../components/pantry/AddItemModal";
 import SpendingStrip from "../components/SpendingStrip";
 import RecentReceiptsStrip from "../components/RecentReceiptsStrip";
 import PantryCardComp from "../components/pantry/PantryCard";
@@ -14,6 +15,7 @@ export default function Pantry() {
   const [cards, setCards] = useState<PantryCard[]>([]);
   const [query, setQuery] = useState<PantryQuery>({ sort: "name" });
   const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [receiptRefreshKey, setReceiptRefreshKey] = useState(0);
   const [openCard, setOpenCard] = useState<PantryCard | null>(null);
 
@@ -43,9 +45,7 @@ export default function Pantry() {
           <Button variant="ghost" icon={ReceiptIcon} onClick={() => setShowReceiptModal(true)}>
             Add from receipt
           </Button>
-          <Button variant="primary" icon={Plus} onClick={() => { /* AddItemModal — Task 22 */ }}>
-            Add item
-          </Button>
+          <Button variant="primary" icon={Plus} onClick={() => setShowAddModal(true)}>Add item</Button>
         </div>
       </div>
 
@@ -80,6 +80,7 @@ export default function Pantry() {
           }}
         />
       )}
+      {showAddModal && <AddItemModal onClose={() => setShowAddModal(false)} onAdded={load} />}
     </div>
   );
 }
