@@ -6,6 +6,7 @@ import { deleteBatch } from "../../api/pantry";
 import Button from "../ui/Button";
 import BatchRow from "./BatchRow";
 import BatchEditForm from "./BatchEditForm";
+import IngredientEditForm from "./IngredientEditForm";
 
 interface Props {
   card: PantryCard | null;
@@ -15,6 +16,7 @@ interface Props {
 
 export default function PantryDrawer({ card, onClose, onChanged }: Props) {
   const [editingBatchId, setEditingBatchId] = useState<number | null>(null);
+  const [editingIngredient, setEditingIngredient] = useState(false);
 
   useEffect(() => {
     if (!card) return;
@@ -43,9 +45,17 @@ export default function PantryDrawer({ card, onClose, onChanged }: Props) {
 
         <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
           <div>
-            <Button variant="ghost" size="sm" icon={Settings} onClick={() => {/* IngredientEditForm — Task 20 */}}>
-              Edit ingredient
-            </Button>
+            {editingIngredient ? (
+              <IngredientEditForm
+                ingredient={card.ingredient}
+                onCancel={() => setEditingIngredient(false)}
+                onSaved={() => { setEditingIngredient(false); onChanged(); }}
+              />
+            ) : (
+              <Button variant="ghost" size="sm" icon={Settings} onClick={() => setEditingIngredient(true)}>
+                Edit ingredient
+              </Button>
+            )}
           </div>
 
           <section>
