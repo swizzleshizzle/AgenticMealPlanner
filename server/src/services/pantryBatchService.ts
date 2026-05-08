@@ -91,3 +91,39 @@ export function suggestExpirationDate(input: SuggestExpirationInput): Date | nul
   if (days == null) return null;
   return new Date(input.tripDate.getTime() + days * 24 * 60 * 60 * 1000);
 }
+
+export interface UpdateBatchInput {
+  quantity?: number;
+  unit?: string;
+  location?: PantryLocation;
+  expirationDate?: string | null;
+  purchaseDate?: string | null;
+  costAtPurchase?: number | null;
+  tags?: string[];
+}
+
+export async function updateBatch(id: number, input: UpdateBatchInput) {
+  const data: any = {};
+  if (input.quantity != null) data.quantity = Math.max(0, input.quantity);
+  if (input.unit != null) data.unit = input.unit;
+  if (input.location != null) data.location = input.location;
+  if (input.expirationDate !== undefined) data.expirationDate = input.expirationDate ? new Date(input.expirationDate) : null;
+  if (input.purchaseDate !== undefined) data.purchaseDate = input.purchaseDate ? new Date(input.purchaseDate) : null;
+  if (input.costAtPurchase !== undefined) data.costAtPurchase = input.costAtPurchase != null ? new Prisma.Decimal(input.costAtPurchase) : null;
+  if (input.tags != null) data.tags = input.tags;
+
+  // If quantity drops to 0, soft-delete instead.
+  if (data.quantity === 0) {
+    return prisma.pantryBatch.update({
+      where: { id },
+      data: { ...data, consumedAt: new Date() },
+      include: { ingredient: true },
+    });
+  }
+
+  return prisma.pantryBatch.update({
+    where: { id },
+    data,
+    include: { ingredient: true },
+  });
+}
