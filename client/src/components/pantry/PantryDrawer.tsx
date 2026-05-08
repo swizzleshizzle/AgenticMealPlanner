@@ -1,8 +1,10 @@
 // client/src/components/pantry/PantryDrawer.tsx
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { X, Settings } from "lucide-react";
 import type { PantryCard } from "../../api/pantry";
+import { deleteBatch } from "../../api/pantry";
 import Button from "../ui/Button";
+import BatchRow from "./BatchRow";
 
 interface Props {
   card: PantryCard | null;
@@ -11,6 +13,8 @@ interface Props {
 }
 
 export default function PantryDrawer({ card, onClose, onChanged }: Props) {
+  const [editingBatchId, setEditingBatchId] = useState<number | null>(null);
+
   useEffect(() => {
     if (!card) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -57,12 +61,16 @@ export default function PantryDrawer({ card, onClose, onChanged }: Props) {
               Batches ({card.batchCount})
             </div>
             <div className="flex flex-col gap-2">
-              {/* BatchRow per batch — Task 18 */}
               {card.batches.map((b) => (
-                <div key={b.id} className="bg-surface-2 border border-line-soft rounded-[10px] p-3 text-[13px] text-ink-2">
-                  {b.quantity} {b.unit} · {b.location}
-                  {b.expirationDate && ` · expires ${new Date(b.expirationDate).toLocaleDateString()}`}
-                </div>
+                <BatchRow
+                  key={b.id}
+                  batch={b}
+                  onEdit={() => setEditingBatchId(b.id)}
+                  onDelete={async () => {
+                    await deleteBatch(b.id);
+                    onChanged();
+                  }}
+                />
               ))}
             </div>
             <div className="mt-3">
