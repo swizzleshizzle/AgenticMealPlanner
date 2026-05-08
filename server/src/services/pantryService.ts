@@ -1,12 +1,81 @@
 import { PrismaClient } from "@prisma/client";
+import { aggregateCards, type PantryCard } from "./pantryAggregation.js";
 
 const prisma = new PrismaClient();
 
-export async function getAllPantryItems() {
-  return prisma.pantryBatch.findMany({
-    include: { ingredient: true },
-    orderBy: { ingredient: { name: "asc" } },
+export interface PantryQuery {
+  location?: "fridge" | "freezer" | "pantry";
+  category?: string;
+  q?: string;            // free-text search on ingredient.name
+  sort?: "name" | "expiring" | "added" | "lowstock";
+  showConsumed?: boolean;
+  lowOnly?: boolean;
+}
+
+export async function getPantryCards(query: PantryQuery = {}): Promise<PantryCard[]> {
+  // We pull all ingredients (excluding orphan one-offs with no active batches)
+  // and all active batches, then aggregate in memory. Pantry is small.
+  const ingredientWhere: any = {};
+  if (query.category) ingredientWhere.category = query.category;
+  if (query.q) ingredientWhere.name = { contains: query.q, mode: "insensitive" };
+
+  const [ingredientRows, batchRows] = await Promise.all([
+    prisma.ingredient.findMany({ where: ingredientWhere }),
+    prisma.pantryBatch.findMany({
+      where: query.showConsumed ? {} : { consumedAt: null },
+    }),
+  ]);
+
+  let cards = aggregateCards({
+    ingredients: ingredientRows,
+    batches: batchRows,
   });
+
+  // Hide ingredients that have no active batches AND aren't one-offs explicitly
+  // listed: actually, hide all ingredients with no active batches by default,
+  // since those are pantry "ghosts" left over from old receipts. Keep them
+  // queryable through ingredients API.
+  cards = cards.filter((c) => c.batchCount > 0);
+
+  // Hide one-offs that no longer have active batches (already covered above).
+  // Hide one-offs from search results by default — they're personal notes.
+  // (No flag needed: one-offs with active batches still surface.)
+
+  if (query.location) {
+    cards = cards.filter((c) =>
+      c.batches.some((b) => b.location === query.location),
+    );
+  }
+
+  if (query.lowOnly) {
+    cards = cards.filter((c) => c.isLowStock);
+  }
+
+  switch (query.sort ?? "name") {
+    case "expiring":
+      cards.sort((a, b) => {
+        const ae = a.soonestExpiration?.getTime() ?? Number.POSITIVE_INFINITY;
+        const be = b.soonestExpiration?.getTime() ?? Number.POSITIVE_INFINITY;
+        return ae - be;
+      });
+      break;
+    case "added":
+      cards.sort((a, b) => {
+        const aLatest = Math.max(...a.batches.map((x) => x.createdAt.getTime()), 0);
+        const bLatest = Math.max(...b.batches.map((x) => x.createdAt.getTime()), 0);
+        return bLatest - aLatest;
+      });
+      break;
+    case "lowstock":
+      cards.sort((a, b) => Number(b.isLowStock) - Number(a.isLowStock));
+      break;
+    case "name":
+    default:
+      cards.sort((a, b) => a.ingredient.name.localeCompare(b.ingredient.name));
+      break;
+  }
+
+  return cards;
 }
 
 export async function addPantryItem(data: {
