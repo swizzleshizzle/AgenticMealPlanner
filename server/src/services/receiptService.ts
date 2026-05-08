@@ -69,6 +69,32 @@ export async function parseReceipt(input: ReceiptParseInput): Promise<ParseResul
     }
   }
 
+  const matchedIds = parsed.items
+    .map((i) => i.ingredientId)
+    .filter((x): x is number => x != null);
+  const matchedIngredients = await prisma.ingredient.findMany({
+    where: { id: { in: matchedIds } },
+    select: { id: true, shelfLifeFridgeDays: true, shelfLifeFreezerDays: true, shelfLifePantryDays: true },
+  });
+  const byId = new Map(matchedIngredients.map((i) => [i.id, i]));
+
+  for (const item of parsed.items) {
+    if (item.ingredientId == null || !item.locationGuess) {
+      item.suggestedExpiration = null;
+      continue;
+    }
+    const ing = byId.get(item.ingredientId);
+    if (!ing) { item.suggestedExpiration = null; continue; }
+    const days =
+      item.locationGuess === "fridge" ? ing.shelfLifeFridgeDays
+      : item.locationGuess === "freezer" ? ing.shelfLifeFreezerDays
+      : ing.shelfLifePantryDays;
+    if (days == null) { item.suggestedExpiration = null; continue; }
+    const tripDate = new Date(parsed.tripDate);
+    const exp = new Date(tripDate.getTime() + days * 86400000);
+    item.suggestedExpiration = exp.toISOString().slice(0, 10);
+  }
+
   const sourcePath = input.kind === "text" ? null : input.path;
   const rawText = input.kind === "text" ? input.text : null;
   const parseId = stashReceiptParse(parsed, sourcePath, rawText);
