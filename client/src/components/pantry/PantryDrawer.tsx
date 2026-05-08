@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react";
 import { X, Settings } from "lucide-react";
 import type { PantryCard } from "../../api/pantry";
-import { deleteBatch } from "../../api/pantry";
+import { deleteBatch, restoreBatch } from "../../api/pantry";
+import { useToast } from "../ui/ToastProvider";
 import Button from "../ui/Button";
 import BatchRow from "./BatchRow";
 import BatchEditForm from "./BatchEditForm";
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export default function PantryDrawer({ card, onClose, onChanged }: Props) {
+  const showToast = useToast();
   const [editingBatchId, setEditingBatchId] = useState<number | null>(null);
   const [editingIngredient, setEditingIngredient] = useState(false);
   const [addingBatch, setAddingBatch] = useState(false);
@@ -87,7 +89,21 @@ export default function PantryDrawer({ card, onClose, onChanged }: Props) {
                     key={b.id}
                     batch={b}
                     onEdit={() => setEditingBatchId(b.id)}
-                    onDelete={async () => { await deleteBatch(b.id); onChanged(); }}
+                    onDelete={async () => {
+                      await deleteBatch(b.id);
+                      onChanged();
+                      showToast({
+                        message: `Deleted ${b.quantity} ${b.unit} of ${card.ingredient.name}.`,
+                        durationMs: 10000,
+                        action: {
+                          label: "Undo",
+                          onClick: async () => {
+                            await restoreBatch(b.id);
+                            onChanged();
+                          },
+                        },
+                      });
+                    }}
                   />
                 ),
               )}
