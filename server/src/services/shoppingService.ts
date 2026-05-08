@@ -72,7 +72,7 @@ export async function generateShoppingList(planId: number) {
     include: { meal: { include: { ingredients: true } } },
   });
 
-  const pantryItems = await prisma.pantryBatch.findMany();
+  const pantryItems = await prisma.pantryBatch.findMany({ where: { consumedAt: null } });
 
   const aggregated = aggregateShoppingItems({
     plannedMeals: plannedMeals.map((pm) => ({
