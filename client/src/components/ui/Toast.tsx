@@ -4,6 +4,7 @@ export interface ToastData {
   id: number;
   message: string;
   action?: { label: string; onClick: () => void };
+  durationMs?: number;
 }
 
 interface Props {
@@ -18,9 +19,9 @@ export default function Toast({ toast, onDismiss }: Props) {
 
   useEffect(() => {
     if (!toast || paused) return;
-    const timer = setTimeout(onDismiss, AUTO_DISMISS_MS);
+    const timer = setTimeout(onDismiss, toast.durationMs ?? AUTO_DISMISS_MS);
     return () => clearTimeout(timer);
-  }, [toast?.id, paused, onDismiss]);
+  }, [toast?.id, paused, onDismiss, toast?.durationMs]);
 
   if (!toast) return null;
 
