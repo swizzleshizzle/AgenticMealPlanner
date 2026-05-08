@@ -5,6 +5,7 @@ import type { PantryCard } from "../../api/pantry";
 import { deleteBatch } from "../../api/pantry";
 import Button from "../ui/Button";
 import BatchRow from "./BatchRow";
+import BatchEditForm from "./BatchEditForm";
 
 interface Props {
   card: PantryCard | null;
@@ -61,17 +62,23 @@ export default function PantryDrawer({ card, onClose, onChanged }: Props) {
               Batches ({card.batchCount})
             </div>
             <div className="flex flex-col gap-2">
-              {card.batches.map((b) => (
-                <BatchRow
-                  key={b.id}
-                  batch={b}
-                  onEdit={() => setEditingBatchId(b.id)}
-                  onDelete={async () => {
-                    await deleteBatch(b.id);
-                    onChanged();
-                  }}
-                />
-              ))}
+              {card.batches.map((b) =>
+                editingBatchId === b.id ? (
+                  <BatchEditForm
+                    key={b.id}
+                    batch={b}
+                    onCancel={() => setEditingBatchId(null)}
+                    onSaved={() => { setEditingBatchId(null); onChanged(); }}
+                  />
+                ) : (
+                  <BatchRow
+                    key={b.id}
+                    batch={b}
+                    onEdit={() => setEditingBatchId(b.id)}
+                    onDelete={async () => { await deleteBatch(b.id); onChanged(); }}
+                  />
+                ),
+              )}
             </div>
             <div className="mt-3">
               <Button variant="ghost" size="sm" onClick={() => {/* add batch — Task 21 */}}>
