@@ -22,7 +22,7 @@ import {
   type WeeklyPlan,
   type PlannedMeal,
 } from "../api/plans";
-import { getPantry, type PantryItem } from "../api/pantry";
+import { getPantry, type PantryCard } from "../api/pantry";
 import { getShoppingList, type ShoppingItem } from "../api/shopping";
 import Pill from "../components/ui/Pill";
 import PhotoTile from "../components/ui/PhotoTile";
@@ -45,11 +45,8 @@ function todayKey(): string {
   return DAYS[new Date().getDay()];
 }
 
-function expiresInDays(item: PantryItem): number | null {
-  if (!item.expirationDate) return null;
-  const ms = new Date(item.expirationDate).getTime() - Date.now();
-  if (Number.isNaN(ms)) return null;
-  return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+function expiresInDays(card: PantryCard): number | null {
+  return card.nextExpirationDays ?? null;
 }
 
 function planWeekStart(plan: WeeklyPlan): Date {
@@ -79,7 +76,7 @@ function planNotPast(plan: WeeklyPlan): boolean {
 
 export default function Dashboard() {
   const [plan, setPlan] = useState<WeeklyPlan | null>(null);
-  const [pantry, setPantry] = useState<PantryItem[]>([]);
+  const [pantry, setPantry] = useState<PantryCard[]>([]);
   const [shopping, setShopping] = useState<ShoppingItem[]>([]);
   const [now] = useState(() => new Date());
   const navigate = useNavigate();
@@ -386,7 +383,7 @@ export default function Dashboard() {
               </div>
               <div className="flex flex-col gap-2">
                 {expiringSoon.map(({ p, d }) => (
-                  <div key={p.id} className="flex items-center justify-between text-[13px]">
+                  <div key={p.ingredient.id} className="flex items-center justify-between text-[13px]">
                     <span className="text-ink-1 truncate pr-2">{p.ingredient.name}</span>
                     <Pill tone="warn" size="sm">{d}d</Pill>
                   </div>
