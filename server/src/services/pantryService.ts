@@ -125,72 +125,74 @@ export function selectBatchesToDrain(input: {
 }
 
 export async function deductIngredientsForMeal(mealId: number, servingMultiplier: number) {
-  const mealIngredients = await prisma.mealIngredient.findMany({
-    where: { mealId },
-    include: { ingredient: true },
-  });
-
-  const shortfalls: Array<{
-    ingredientId: number;
-    ingredientName: string;
-    missingQty: number;
-    unit: string;
-    missingField?: "densityGPerMl" | "gramsPerCount";
-  }> = [];
-
-  for (const mi of mealIngredients) {
-    const needed = mi.quantity * servingMultiplier;
-    const ingredient = mi.ingredient;
-    const batchRows = await prisma.pantryBatch.findMany({
-      where: { ingredientId: mi.ingredientId, consumedAt: null },
+  return prisma.$transaction(async (tx) => {
+    const mealIngredients = await (tx as any).mealIngredient.findMany({
+      where: { mealId },
+      include: { ingredient: true },
     });
 
-    let plan: DrainPlan;
-    try {
-      plan = selectBatchesToDrain({
-        needed,
-        neededUnit: mi.unit,
-        ingredient,
-        batches: batchRows.map((b) => ({
-          id: b.id,
-          quantity: b.quantity,
-          unit: b.unit,
-          expirationDate: b.expirationDate,
-          tags: b.tags,
-        })),
+    const shortfalls: Array<{
+      ingredientId: number;
+      ingredientName: string;
+      missingQty: number;
+      unit: string;
+      missingField?: "densityGPerMl" | "gramsPerCount";
+    }> = [];
+
+    for (const mi of mealIngredients) {
+      const needed = mi.quantity * servingMultiplier;
+      const ingredient = mi.ingredient;
+      const batchRows = await (tx as any).pantryBatch.findMany({
+        where: { ingredientId: mi.ingredientId, consumedAt: null },
       });
-    } catch (e) {
-      if (e instanceof UnitConversionError) {
-        // Cannot deduct — record as shortfall and move on.
+
+      let plan: DrainPlan;
+      try {
+        plan = selectBatchesToDrain({
+          needed,
+          neededUnit: mi.unit,
+          ingredient,
+          batches: batchRows.map((b: any) => ({
+            id: b.id,
+            quantity: b.quantity,
+            unit: b.unit,
+            expirationDate: b.expirationDate,
+            tags: b.tags,
+          })),
+        });
+      } catch (e) {
+        if (e instanceof UnitConversionError) {
+          // Cannot deduct — record as shortfall and move on.
+          shortfalls.push({
+            ingredientId: mi.ingredientId,
+            ingredientName: ingredient.name,
+            missingQty: needed,
+            unit: mi.unit,
+            missingField: e.missing === "densityGPerMl" || e.missing === "gramsPerCount" ? e.missing : undefined,
+          });
+          continue;
+        }
+        throw e;
+      }
+
+      for (const c of plan.consumed) {
+        if (c.partial) {
+          await (tx as any).pantryBatch.update({ where: { id: c.batchId }, data: { quantity: c.newQuantity } });
+        } else {
+          await (tx as any).pantryBatch.update({ where: { id: c.batchId }, data: { quantity: 0, consumedAt: new Date() } });
+        }
+      }
+
+      if (plan.shortfall > 0) {
         shortfalls.push({
           ingredientId: mi.ingredientId,
           ingredientName: ingredient.name,
-          missingQty: needed,
-          unit: mi.unit,
-          missingField: e.missing === "densityGPerMl" || e.missing === "gramsPerCount" ? e.missing : undefined,
+          missingQty: plan.shortfall,
+          unit: plan.shortfallUnit,
         });
-        continue;
       }
-      throw e;
     }
 
-    await prisma.$transaction(
-      plan.consumed.map((c) =>
-        c.partial
-          ? prisma.pantryBatch.update({ where: { id: c.batchId }, data: { quantity: c.newQuantity } })
-          : prisma.pantryBatch.update({ where: { id: c.batchId }, data: { quantity: 0, consumedAt: new Date() } }),
-      ),
-    );
-
-    if (plan.shortfall > 0) {
-      shortfalls.push({
-        ingredientId: mi.ingredientId,
-        ingredientName: ingredient.name,
-        missingQty: plan.shortfall,
-        unit: plan.shortfallUnit,
-      });
-    }
-  }
-
-  return { shortfalls };
+    return { shortfalls };
+  });
 }
