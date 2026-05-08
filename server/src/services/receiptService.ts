@@ -77,7 +77,7 @@ export async function parseReceipt(input: ReceiptParseInput): Promise<ParseResul
 // Pure helpers (extracted for unit testing).
 // ---------------------------------------------------------------------------
 
-export interface ExistingPantryItem {
+export interface ExistingPantryBatch {
   id: number;
   ingredientId: number;
   quantity: number;
@@ -100,7 +100,7 @@ export type MergeDecision =
 
 export function computeMergeDecision(
   incoming: IncomingPantryRow,
-  existing: ExistingPantryItem[],
+  existing: ExistingPantryBatch[],
 ): MergeDecision {
   const match = existing.find(
     (e) =>
@@ -208,11 +208,11 @@ export async function commitReceipt(input: CommitInput) {
 
     // 3. For each item the user kept (isCommitted), resolve the ingredient,
     //    create the ReceiptItem row, then merge into pantry if it's food.
-    const existingPantry = await tx.pantryItem.findMany({
+    const existingPantry = await tx.pantryBatch.findMany({
       select: { id: true, ingredientId: true, quantity: true, unit: true, location: true, expirationDate: true },
     });
     // Mutable working copy so successive merges within the same commit see prior writes.
-    const workingPantry: ExistingPantryItem[] = existingPantry.map((p) => ({
+    const workingPantry: ExistingPantryBatch[] = existingPantry.map((p) => ({
       id: p.id,
       ingredientId: p.ingredientId,
       quantity: Number(p.quantity),
@@ -270,10 +270,10 @@ export async function commitReceipt(input: CommitInput) {
       const decision = computeMergeDecision(incoming, workingPantry);
 
       if (decision.action === "increment") {
-        await tx.pantryItem.update({
+        await tx.pantryBatch.update({
           where: { id: decision.pantryItemId },
           data: {
-            quantity: decision.newQuantity, // PantryItem.quantity is Float in the schema
+            quantity: decision.newQuantity, // PantryBatch.quantity is Float in the schema
             expirationDate: decision.newExpirationDate,
           },
         });
@@ -285,10 +285,10 @@ export async function commitReceipt(input: CommitInput) {
           workingPantry[idx].expirationDate = decision.newExpirationDate;
         }
       } else {
-        const created = await tx.pantryItem.create({
+        const created = await tx.pantryBatch.create({
           data: {
             ingredientId: incoming.ingredientId,
-            quantity: incoming.quantity, // PantryItem.quantity is Float in the schema
+            quantity: incoming.quantity, // PantryBatch.quantity is Float in the schema
             unit: incoming.unit,
             location: incoming.location as any,
             expirationDate: incoming.expirationDate ?? undefined,
@@ -340,8 +340,8 @@ export async function getReceiptById(id: number) {
 }
 
 export async function deleteReceipt(id: number) {
-  // Cascade deletes the receipt_items via the FK; PantryItems are untouched
-  // because there's no FK back from PantryItem.
+  // Cascade deletes the receipt_items via the FK; PantryBatches are untouched
+  // because the FK from PantryBatch.receiptItemId uses SET NULL on delete.
   return prisma.receipt.delete({ where: { id } });
 }
 
