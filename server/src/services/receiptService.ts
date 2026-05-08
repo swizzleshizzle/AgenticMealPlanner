@@ -1,8 +1,10 @@
 import { PrismaClient, Prisma } from "@prisma/client";
+import type { PantryLocation } from "@prisma/client";
 import { runFirstPass, runRescuePass, type ReceiptParseInput } from "../claude/receiptParser.js";
 import { fuzzyMatchIngredient, type IngredientCandidate } from "../claude/ingredientMatcher.js";
 import { stashReceiptParse, peekReceiptParse, popReceiptParse, type ParsedReceiptPayload } from "./receiptParseSessions.js";
 import { moveSourceIntoReceipt } from "./receiptStorage.js";
+import { suggestExpirationDate } from "./pantryBatchService.js";
 
 const prisma = new PrismaClient();
 
@@ -207,20 +209,7 @@ export async function commitReceipt(input: CommitInput) {
     }
 
     // 3. For each item the user kept (isCommitted), resolve the ingredient,
-    //    create the ReceiptItem row, then merge into pantry if it's food.
-    const existingPantry = await tx.pantryBatch.findMany({
-      select: { id: true, ingredientId: true, quantity: true, unit: true, location: true, expirationDate: true },
-    });
-    // Mutable working copy so successive merges within the same commit see prior writes.
-    const workingPantry: ExistingPantryBatch[] = existingPantry.map((p) => ({
-      id: p.id,
-      ingredientId: p.ingredientId,
-      quantity: Number(p.quantity),
-      unit: p.unit,
-      location: p.location,
-      expirationDate: p.expirationDate,
-    }));
-
+    //    create the ReceiptItem row, then create a fresh PantryBatch if it's food.
     for (const edit of input.items) {
       const stashItem = stashed.payload.items[edit.index];
       if (!stashItem) continue; // out-of-range index — skip silently
@@ -241,7 +230,7 @@ export async function commitReceipt(input: CommitInput) {
       }
 
       // 3b. Create the ReceiptItem row.
-      await tx.receiptItem.create({
+      const receiptItemRow = await tx.receiptItem.create({
         data: {
           receiptId: receipt.id,
           rawName: stashItem.rawName,
@@ -257,52 +246,36 @@ export async function commitReceipt(input: CommitInput) {
         },
       });
 
-      // 3c. If food + committed + has an ingredient, write to pantry.
+      // 3c. If food + committed + has an ingredient, create a fresh PantryBatch.
       if (edit.kind !== "food" || !edit.isCommitted || ingredientId == null) continue;
 
-      const incoming: IncomingPantryRow = {
-        ingredientId,
-        quantity: edit.quantity,
-        unit: edit.unit,
-        location: (edit.locationGuess ?? "pantry") as string,
-        expirationDate: edit.expirationDate ? new Date(edit.expirationDate) : null,
-      };
-      const decision = computeMergeDecision(incoming, workingPantry);
+      const ingredient = await tx.ingredient.findUnique({ where: { id: ingredientId } });
+      const expirationDate =
+        edit.expirationDate ? new Date(edit.expirationDate)
+        : ingredient ? suggestExpirationDate({
+            tripDate: new Date(input.tripDate),
+            location: (edit.locationGuess ?? "pantry") as PantryLocation,
+            ingredient: {
+              shelfLifeFridgeDays: ingredient.shelfLifeFridgeDays,
+              shelfLifeFreezerDays: ingredient.shelfLifeFreezerDays,
+              shelfLifePantryDays: ingredient.shelfLifePantryDays,
+            },
+          })
+        : null;
 
-      if (decision.action === "increment") {
-        await tx.pantryBatch.update({
-          where: { id: decision.pantryItemId },
-          data: {
-            quantity: decision.newQuantity, // PantryBatch.quantity is Float in the schema
-            expirationDate: decision.newExpirationDate,
-          },
-        });
-        // Reflect in the working copy so a later item in this same receipt
-        // merges into the same row (e.g., two banana lines on one receipt).
-        const idx = workingPantry.findIndex((w) => w.id === decision.pantryItemId);
-        if (idx >= 0) {
-          workingPantry[idx].quantity = decision.newQuantity;
-          workingPantry[idx].expirationDate = decision.newExpirationDate;
-        }
-      } else {
-        const created = await tx.pantryBatch.create({
-          data: {
-            ingredientId: incoming.ingredientId,
-            quantity: incoming.quantity, // PantryBatch.quantity is Float in the schema
-            unit: incoming.unit,
-            location: incoming.location as any,
-            expirationDate: incoming.expirationDate ?? undefined,
-          },
-        });
-        workingPantry.push({
-          id: created.id,
-          ingredientId: incoming.ingredientId,
-          quantity: incoming.quantity,
-          unit: incoming.unit,
-          location: incoming.location,
-          expirationDate: incoming.expirationDate,
-        });
-      }
+      const newBatch = await tx.pantryBatch.create({
+        data: {
+          ingredientId,
+          quantity: edit.quantity,
+          unit: edit.unit,
+          location: (edit.locationGuess ?? "pantry") as any,
+          expirationDate,
+          purchaseDate: new Date(input.tripDate),
+          costAtPurchase: edit.price != null ? new Prisma.Decimal(edit.price) : null,
+          tags: [],
+          receiptItemId: receiptItemRow.id,
+        },
+      });
     }
 
     return receipt;
