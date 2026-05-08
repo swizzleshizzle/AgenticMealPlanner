@@ -101,63 +101,6 @@ export async function parseReceipt(input: ReceiptParseInput): Promise<ParseResul
   return { parseId, payload: parsed };
 }
 
-// ---------------------------------------------------------------------------
-// Pure helpers (extracted for unit testing).
-// ---------------------------------------------------------------------------
-
-export interface ExistingPantryBatch {
-  id: number;
-  ingredientId: number;
-  quantity: number;
-  unit: string;
-  location: string;
-  expirationDate: Date | null;
-}
-
-export interface IncomingPantryRow {
-  ingredientId: number;
-  quantity: number;
-  unit: string;
-  location: string;
-  expirationDate: Date | null;
-}
-
-export type MergeDecision =
-  | { action: "create" }
-  | { action: "increment"; pantryItemId: number; newQuantity: number; newExpirationDate: Date | null };
-
-export function computeMergeDecision(
-  incoming: IncomingPantryRow,
-  existing: ExistingPantryBatch[],
-): MergeDecision {
-  const match = existing.find(
-    (e) =>
-      e.ingredientId === incoming.ingredientId &&
-      e.unit === incoming.unit &&
-      e.location === incoming.location,
-  );
-  if (!match) return { action: "create" };
-
-  // FIFO expiration bias: if either side has a date and the other is null,
-  // take the non-null. If both have dates, take the earlier one.
-  let newExpirationDate: Date | null;
-  if (match.expirationDate && incoming.expirationDate) {
-    newExpirationDate =
-      incoming.expirationDate < match.expirationDate
-        ? incoming.expirationDate
-        : match.expirationDate;
-  } else {
-    newExpirationDate = match.expirationDate ?? incoming.expirationDate;
-  }
-
-  return {
-    action: "increment",
-    pantryItemId: match.id,
-    newQuantity: match.quantity + incoming.quantity,
-    newExpirationDate,
-  };
-}
-
 export function weeklyWindow(reference: Date): { weekStart: Date; weekEnd: Date } {
   // Sunday-anchored week. weekStart = Sunday 00:00 UTC, weekEnd = Saturday 23:59:59.999 UTC.
   // We use the *local* day-of-week to decide which calendar week the reference belongs to
