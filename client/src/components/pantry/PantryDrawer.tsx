@@ -7,6 +7,7 @@ import Button from "../ui/Button";
 import BatchRow from "./BatchRow";
 import BatchEditForm from "./BatchEditForm";
 import IngredientEditForm from "./IngredientEditForm";
+import BatchAddForm from "./BatchAddForm";
 
 interface Props {
   card: PantryCard | null;
@@ -17,6 +18,7 @@ interface Props {
 export default function PantryDrawer({ card, onClose, onChanged }: Props) {
   const [editingBatchId, setEditingBatchId] = useState<number | null>(null);
   const [editingIngredient, setEditingIngredient] = useState(false);
+  const [addingBatch, setAddingBatch] = useState(false);
 
   useEffect(() => {
     if (!card) return;
@@ -91,9 +93,17 @@ export default function PantryDrawer({ card, onClose, onChanged }: Props) {
               )}
             </div>
             <div className="mt-3">
-              <Button variant="ghost" size="sm" onClick={() => {/* add batch — Task 21 */}}>
-                + Add another batch
-              </Button>
+              {addingBatch ? (
+                <BatchAddForm
+                  ingredient={card.ingredient}
+                  onCancel={() => setAddingBatch(false)}
+                  onSaved={() => { setAddingBatch(false); onChanged(); }}
+                />
+              ) : (
+                <Button variant="ghost" size="sm" onClick={() => setAddingBatch(true)}>
+                  + Add another batch
+                </Button>
+              )}
             </div>
           </section>
         </div>
