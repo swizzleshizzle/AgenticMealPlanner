@@ -41,4 +41,28 @@ router.patch("/batches/:id", async (req, res) => {
   }
 });
 
+router.delete("/batches/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    const batch = await pantryBatchService.softDeleteBatch(id);
+    res.json(batch);
+  } catch (e: any) {
+    if (e?.code === "P2025") {
+      res.status(404).json({ error: "Batch not found" });
+      return;
+    }
+    throw e;
+  }
+});
+
+router.post("/batches/:id/restore", async (req, res) => {
+  const id = Number(req.params.id);
+  const batch = await pantryBatchService.restoreBatch(id);
+  if (!batch) {
+    res.status(404).json({ error: "Cannot restore (not found, not consumed, or past 30-day window)" });
+    return;
+  }
+  res.json(batch);
+});
+
 export default router;
