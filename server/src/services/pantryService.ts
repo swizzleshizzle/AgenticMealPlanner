@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { aggregateCards, type PantryCard } from "./pantryAggregation.js";
+import { convert, UnitConversionError } from "../lib/units.js";
 
 const prisma = new PrismaClient();
 
@@ -78,62 +79,101 @@ export async function getPantryCards(query: PantryQuery = {}): Promise<PantryCar
   return cards;
 }
 
-export async function addPantryItem(data: {
-  ingredientId: number;
-  quantity: number;
-  unit: string;
-  location: "fridge" | "freezer" | "pantry";
-  expirationDate?: string;
-}) {
-  return prisma.pantryBatch.create({
-    data: {
-      ingredientId: data.ingredientId,
-      quantity: data.quantity,
-      unit: data.unit,
-      location: data.location,
-      expirationDate: data.expirationDate ? new Date(data.expirationDate) : undefined,
-    },
-    include: { ingredient: true },
-  });
+export interface DrainPlan {
+  consumed: Array<{ batchId: number; partial: boolean; newQuantity: number }>;
+  shortfall: number;
+  shortfallUnit: string;
 }
 
-export async function updatePantryItem(id: number, data: { quantity?: number; location?: "fridge" | "freezer" | "pantry" }) {
-  return prisma.pantryBatch.update({
-    where: { id },
-    data,
-    include: { ingredient: true },
+export function selectBatchesToDrain(input: {
+  needed: number;
+  neededUnit: string;
+  ingredient: { defaultUnit: string; densityGPerMl: number | null; gramsPerCount: number | null };
+  batches: Array<{ id: number; quantity: number; unit: string; expirationDate: Date | null; tags: string[] }>;
+}): DrainPlan {
+  const hint = { densityGPerMl: input.ingredient.densityGPerMl, gramsPerCount: input.ingredient.gramsPerCount };
+  // Sort: use_first first, then FEFO ASC, then null-exp last.
+  const ordered = input.batches.slice().sort((a, b) => {
+    const aFirst = a.tags.includes("use_first") ? 0 : 1;
+    const bFirst = b.tags.includes("use_first") ? 0 : 1;
+    if (aFirst !== bFirst) return aFirst - bFirst;
+    const ae = a.expirationDate?.getTime() ?? Number.POSITIVE_INFINITY;
+    const be = b.expirationDate?.getTime() ?? Number.POSITIVE_INFINITY;
+    return ae - be;
   });
-}
 
-export async function deletePantryItem(id: number) {
-  return prisma.pantryBatch.delete({ where: { id } });
+  let remaining = input.needed; // in input.neededUnit
+  const consumed: DrainPlan["consumed"] = [];
+
+  for (const b of ordered) {
+    if (remaining <= 0) break;
+    // How much of this batch (expressed in neededUnit) is available?
+    const batchInNeededUnit = convert(b.quantity, b.unit, input.neededUnit, hint);
+    if (batchInNeededUnit <= remaining) {
+      // Drain entirely.
+      remaining -= batchInNeededUnit;
+      consumed.push({ batchId: b.id, partial: false, newQuantity: 0 });
+    } else {
+      // Partial drain: convert remaining (in neededUnit) back to batch.unit.
+      const drainInBatchUnit = convert(remaining, input.neededUnit, b.unit, hint);
+      consumed.push({ batchId: b.id, partial: true, newQuantity: b.quantity - drainInBatchUnit });
+      remaining = 0;
+    }
+  }
+
+  return { consumed, shortfall: remaining, shortfallUnit: input.neededUnit };
 }
 
 export async function deductIngredientsForMeal(mealId: number, servingMultiplier: number) {
   const mealIngredients = await prisma.mealIngredient.findMany({
     where: { mealId },
+    include: { ingredient: true },
   });
+
+  const shortfalls: Array<{ ingredientId: number; ingredientName: string; missing: number; unit: string }> = [];
 
   for (const mi of mealIngredients) {
     const needed = mi.quantity * servingMultiplier;
-    const pantryItems = await prisma.pantryBatch.findMany({
-      where: { ingredientId: mi.ingredientId },
-      orderBy: { expirationDate: "asc" },
+    const ingredient = mi.ingredient;
+    const batchRows = await prisma.pantryBatch.findMany({
+      where: { ingredientId: mi.ingredientId, consumedAt: null },
     });
 
-    let remaining = needed;
-    for (const item of pantryItems) {
-      if (remaining <= 0) break;
-      if (item.quantity <= remaining) {
-        remaining -= item.quantity;
-        await prisma.pantryBatch.delete({ where: { id: item.id } });
-      } else {
-        await prisma.pantryBatch.update({
-          where: { id: item.id },
-          data: { quantity: item.quantity - remaining },
-        });
-        remaining = 0;
+    let plan: DrainPlan;
+    try {
+      plan = selectBatchesToDrain({
+        needed,
+        neededUnit: mi.unit,
+        ingredient,
+        batches: batchRows.map((b) => ({
+          id: b.id,
+          quantity: b.quantity,
+          unit: b.unit,
+          expirationDate: b.expirationDate,
+          tags: b.tags,
+        })),
+      });
+    } catch (e) {
+      if (e instanceof UnitConversionError) {
+        // Cannot deduct — record as shortfall and move on.
+        shortfalls.push({ ingredientId: mi.ingredientId, ingredientName: ingredient.name, missing: needed, unit: mi.unit });
+        continue;
       }
+      throw e;
+    }
+
+    await prisma.$transaction(
+      plan.consumed.map((c) =>
+        c.partial
+          ? prisma.pantryBatch.update({ where: { id: c.batchId }, data: { quantity: c.newQuantity } })
+          : prisma.pantryBatch.update({ where: { id: c.batchId }, data: { quantity: 0, consumedAt: new Date() } }),
+      ),
+    );
+
+    if (plan.shortfall > 0) {
+      shortfalls.push({ ingredientId: mi.ingredientId, ingredientName: ingredient.name, missing: plan.shortfall, unit: plan.shortfallUnit });
     }
   }
+
+  return { shortfalls };
 }
