@@ -18,6 +18,7 @@ export interface ParsedReceiptPayload {
     defaultUnitGuess?: string | null;
     ingredientId?: number | null;
     matchConfidence?: "high" | "low" | null;
+    suggestedExpiration?: string | null;  // NEW
   }>;
 }
 
