@@ -3,7 +3,7 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 export async function getAllPantryItems() {
-  return prisma.pantryItem.findMany({
+  return prisma.pantryBatch.findMany({
     include: { ingredient: true },
     orderBy: { ingredient: { name: "asc" } },
   });
@@ -16,7 +16,7 @@ export async function addPantryItem(data: {
   location: "fridge" | "freezer" | "pantry";
   expirationDate?: string;
 }) {
-  return prisma.pantryItem.create({
+  return prisma.pantryBatch.create({
     data: {
       ingredientId: data.ingredientId,
       quantity: data.quantity,
@@ -29,7 +29,7 @@ export async function addPantryItem(data: {
 }
 
 export async function updatePantryItem(id: number, data: { quantity?: number; location?: "fridge" | "freezer" | "pantry" }) {
-  return prisma.pantryItem.update({
+  return prisma.pantryBatch.update({
     where: { id },
     data,
     include: { ingredient: true },
@@ -37,7 +37,7 @@ export async function updatePantryItem(id: number, data: { quantity?: number; lo
 }
 
 export async function deletePantryItem(id: number) {
-  return prisma.pantryItem.delete({ where: { id } });
+  return prisma.pantryBatch.delete({ where: { id } });
 }
 
 export async function deductIngredientsForMeal(mealId: number, servingMultiplier: number) {
@@ -47,7 +47,7 @@ export async function deductIngredientsForMeal(mealId: number, servingMultiplier
 
   for (const mi of mealIngredients) {
     const needed = mi.quantity * servingMultiplier;
-    const pantryItems = await prisma.pantryItem.findMany({
+    const pantryItems = await prisma.pantryBatch.findMany({
       where: { ingredientId: mi.ingredientId },
       orderBy: { expirationDate: "asc" },
     });
@@ -57,9 +57,9 @@ export async function deductIngredientsForMeal(mealId: number, servingMultiplier
       if (remaining <= 0) break;
       if (item.quantity <= remaining) {
         remaining -= item.quantity;
-        await prisma.pantryItem.delete({ where: { id: item.id } });
+        await prisma.pantryBatch.delete({ where: { id: item.id } });
       } else {
-        await prisma.pantryItem.update({
+        await prisma.pantryBatch.update({
           where: { id: item.id },
           data: { quantity: item.quantity - remaining },
         });

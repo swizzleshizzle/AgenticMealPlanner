@@ -113,8 +113,18 @@ model Ingredient {
   category    IngredientCategory @default(other)
   defaultUnit String             @default("count") @map("default_unit")
 
+  defaultLocation        PantryLocation? @map("default_location")
+  densityGPerMl          Float?          @map("density_g_per_ml")
+  gramsPerCount          Float?          @map("grams_per_count")
+  shelfLifeFridgeDays    Int?            @map("shelf_life_fridge_days")
+  shelfLifeFreezerDays   Int?            @map("shelf_life_freezer_days")
+  shelfLifePantryDays    Int?            @map("shelf_life_pantry_days")
+  lowStockThreshold      Float?          @map("low_stock_threshold")
+  lowStockUnit           String?         @map("low_stock_unit")
+  isOneOff               Boolean         @default(false) @map("is_one_off")
+
   mealIngredients MealIngredient[]
-  pantryItems     PantryItem[]
+  pantryBatches   PantryBatch[]
   shoppingItems   ShoppingItem[]
   receiptItems    ReceiptItem[]
 
@@ -136,16 +146,26 @@ model MealIngredient {
   @@map("meal_ingredients")
 }
 
-model PantryItem {
-  id             Int            @id @default(autoincrement())
-  ingredientId   Int            @map("ingredient_id")
-  quantity       Float
-  unit           String
-  location       PantryLocation @default(pantry)
-  expirationDate DateTime?      @map("expiration_date")
+model PantryBatch {
+  id              Int             @id @default(autoincrement())
+  ingredientId    Int             @map("ingredient_id")
+  quantity        Float
+  unit            String
+  location        PantryLocation  @default(pantry)
+  expirationDate  DateTime?       @map("expiration_date")
+  purchaseDate    DateTime?       @map("purchase_date")
+  costAtPurchase  Decimal?        @db.Decimal(10, 2) @map("cost_at_purchase")
+  tags            String[]        @default([])
+  receiptItemId   Int?            @map("receipt_item_id")
+  consumedAt      DateTime?       @map("consumed_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
 
-  ingredient Ingredient @relation(fields: [ingredientId], references: [id])
+  ingredient   Ingredient   @relation(fields: [ingredientId], references: [id])
+  receiptItem  ReceiptItem? @relation(fields: [receiptItemId], references: [id])
 
+  @@index([ingredientId, location, consumedAt])
+  @@index([consumedAt])
   @@map("pantry_items")
 }
 
@@ -228,8 +248,9 @@ model ReceiptItem {
   locationGuess  PantryLocation?     @map("location_guess")
   isCommitted    Boolean             @default(true) @map("is_committed")
 
-  receipt    Receipt     @relation(fields: [receiptId], references: [id], onDelete: Cascade)
-  ingredient Ingredient? @relation(fields: [ingredientId], references: [id])
+  receipt       Receipt      @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  ingredient    Ingredient?  @relation(fields: [ingredientId], references: [id])
+  pantryBatches PantryBatch[]
 
   @@map("receipt_items")
 }

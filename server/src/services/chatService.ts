@@ -9,7 +9,7 @@ export async function handleChatMessage(message: string): Promise<ChatResponse &
   const meals = await prisma.meal.findMany({
     select: { id: true, name: true, tags: true, canBatch: true, canFresh: true },
   });
-  const pantryItems = await prisma.pantryItem.findMany({
+  const pantryItems = await prisma.pantryBatch.findMany({
     include: { ingredient: true },
   });
   const pantry = pantryItems.map((p) => ({
