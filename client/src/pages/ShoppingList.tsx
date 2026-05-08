@@ -11,8 +11,10 @@ import {
 } from "../api/plans";
 import {
   generateShoppingList,
+  getLowStockSuggestions,
   getShoppingList,
   toggleItem,
+  type LowStockSuggestion,
   type ShoppingItem,
 } from "../api/shopping";
 import Button from "../components/ui/Button";
@@ -39,6 +41,7 @@ export default function ShoppingList() {
   const [plans, setPlans] = useState<WeeklyPlan[]>([]);
   const [items, setItems] = useState<ShoppingItem[]>([]);
   const [generating, setGenerating] = useState(false);
+  const [lowStock, setLowStock] = useState<LowStockSuggestion[]>([]);
   const [searchParams, setSearchParams] = useSearchParams();
 
   // The viewed week is the URL's source of truth. parseWeekParam normalizes
@@ -57,6 +60,7 @@ export default function ShoppingList() {
 
   useEffect(() => {
     getPlans().then(setPlans).catch(() => setPlans([]));
+    getLowStockSuggestions().then(setLowStock).catch(() => setLowStock([]));
   }, []);
 
   const viewedPlan = useMemo(
@@ -157,6 +161,43 @@ export default function ShoppingList() {
           onGenerate={handleGenerate}
         />
       ) : null}
+
+      {lowStock.length > 0 && (
+        <div className="bg-surface-1 border border-line rounded-[14px] overflow-hidden">
+          <div className="px-4 sm:px-5 py-3 text-[11px] text-ink-3 uppercase tracking-[0.08em] border-b border-line-soft flex justify-between">
+            <span>Running low</span>
+            <span>{lowStock.length} item{lowStock.length === 1 ? "" : "s"}</span>
+          </div>
+          {lowStock.map((s, i) => (
+            <div
+              key={s.ingredientId}
+              className={`grid grid-cols-[1fr_auto] gap-3 items-center px-4 sm:px-5 py-3 ${i < lowStock.length - 1 ? "border-b border-line-soft" : ""}`}
+            >
+              <div>
+                <div className="text-[14px] text-ink-1">{s.name}</div>
+                <div className="text-[12px] text-ink-3">
+                  currently {s.currentQty % 1 === 0 ? s.currentQty : s.currentQty.toFixed(2)} {s.currentUnit}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {/* TODO Task 27: wire add when shopping API supports adding a single item by ingredientId */}
+                <button
+                  className="px-2.5 py-1 text-[11px] font-semibold rounded-[8px] border border-line text-ink-2 hover:bg-surface-2 hover:text-ink-1"
+                  onClick={() => {/* no-op: no single-item add endpoint yet */}}
+                >
+                  + Add to list
+                </button>
+                <button
+                  className="px-2.5 py-1 text-[11px] font-semibold rounded-[8px] text-ink-3 hover:bg-surface-2 hover:text-ink-1"
+                  onClick={() => setLowStock((prev) => prev.filter((x) => x.ingredientId !== s.ingredientId))}
+                >
+                  Hide
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {toBuy.length > 0 && (
         <Section title="To buy" count={toBuy.length}>
