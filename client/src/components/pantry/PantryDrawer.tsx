@@ -9,6 +9,7 @@ import BatchRow from "./BatchRow";
 import BatchEditForm from "./BatchEditForm";
 import IngredientEditForm from "./IngredientEditForm";
 import BatchAddForm from "./BatchAddForm";
+import DensityMissingPrompt from "./DensityMissingPrompt";
 
 interface Props {
   card: PantryCard | null;
@@ -70,6 +71,17 @@ export default function PantryDrawer({ card, onClose, onChanged }: Props) {
               <div>Running low: {card.isLowStock ? "yes" : "no"}</div>
             </div>
           </section>
+
+          {card.partialTotal && (
+            <DensityMissingPrompt
+              ingredient={card.ingredient}
+              missing={card.ingredient.densityGPerMl == null ? "densityGPerMl" : "gramsPerCount"}
+              fromUnit={card.batches[0]?.unit ?? "?"}
+              toUnit={card.ingredient.defaultUnit}
+              onResolved={onChanged}
+              onSkip={() => {/* no-op locally */}}
+            />
+          )}
 
           <section>
             <div className="text-[11px] uppercase tracking-[0.08em] text-ink-3 font-semibold mb-1.5">
