@@ -27,4 +27,18 @@ router.post("/batches", async (req, res) => {
   }
 });
 
+router.patch("/batches/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    const batch = await pantryBatchService.updateBatch(id, req.body);
+    res.json(batch);
+  } catch (e: any) {
+    if (e?.code === "P2025") {
+      res.status(404).json({ error: "Batch not found" });
+      return;
+    }
+    res.status(400).json({ error: e.message ?? "Bad request" });
+  }
+});
+
 export default router;
