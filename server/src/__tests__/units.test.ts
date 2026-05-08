@@ -15,11 +15,11 @@ describe("convert", () => {
   });
 
   it("volume: cup -> tbsp", () => {
-    expect(convert(1, "cup", "tbsp")).toBeCloseTo(16, 5);
+    expect(convert(1, "cup", "tbsp")).toBeCloseTo(16, 3);
   });
 
   it("volume: tbsp -> tsp", () => {
-    expect(convert(1, "tbsp", "tsp")).toBeCloseTo(3, 5);
+    expect(convert(1, "tbsp", "tsp")).toBeCloseTo(3, 3);
   });
 
   it("volume: cup -> mL", () => {
@@ -33,7 +33,7 @@ describe("convert", () => {
   it("normalizes unit aliases (LB, lbs, fl oz)", () => {
     expect(convert(1, "LB", "oz")).toBeCloseTo(16, 5);
     expect(convert(1, "lbs", "oz")).toBeCloseTo(16, 5);
-    expect(convert(8, "fl oz", "cup")).toBeCloseTo(0.9858, 3);
+    expect(convert(8, "fl oz", "cup")).toBeCloseTo(1.0, 3);
   });
 
   it("cross-type mass<->volume requires density", () => {

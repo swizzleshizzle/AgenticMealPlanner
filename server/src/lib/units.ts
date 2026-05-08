@@ -27,14 +27,13 @@ const MASS: Record<string, number> = {
   lb: 453.592,
 };
 
-const _CUP_ML = 236.588;
 const VOLUME: Record<string, number> = {
   ml: 1,
   l: 1000,
-  tsp: _CUP_ML / 48,
-  tbsp: _CUP_ML / 16,
-  fl_oz: _CUP_ML * 0.9858 / 8,
-  cup: _CUP_ML,
+  tsp: 4.92892,
+  tbsp: 14.7868,
+  fl_oz: 29.5735,
+  cup: 236.588,
   pt: 473.176,
   qt: 946.353,
   gal: 3785.41,
