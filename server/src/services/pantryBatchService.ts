@@ -127,3 +127,25 @@ export async function updateBatch(id: number, input: UpdateBatchInput) {
     include: { ingredient: true },
   });
 }
+
+const RESTORE_WINDOW_DAYS = 30;
+
+export async function softDeleteBatch(id: number) {
+  return prisma.pantryBatch.update({
+    where: { id },
+    data: { consumedAt: new Date() },
+    include: { ingredient: true },
+  });
+}
+
+export async function restoreBatch(id: number) {
+  const batch = await prisma.pantryBatch.findUnique({ where: { id } });
+  if (!batch || !batch.consumedAt) return null;
+  const ageMs = Date.now() - batch.consumedAt.getTime();
+  if (ageMs > RESTORE_WINDOW_DAYS * 24 * 60 * 60 * 1000) return null;
+  return prisma.pantryBatch.update({
+    where: { id },
+    data: { consumedAt: null },
+    include: { ingredient: true },
+  });
+}
