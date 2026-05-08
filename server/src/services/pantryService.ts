@@ -130,7 +130,13 @@ export async function deductIngredientsForMeal(mealId: number, servingMultiplier
     include: { ingredient: true },
   });
 
-  const shortfalls: Array<{ ingredientId: number; ingredientName: string; missing: number; unit: string }> = [];
+  const shortfalls: Array<{
+    ingredientId: number;
+    ingredientName: string;
+    missingQty: number;
+    unit: string;
+    missingField?: "densityGPerMl" | "gramsPerCount";
+  }> = [];
 
   for (const mi of mealIngredients) {
     const needed = mi.quantity * servingMultiplier;
@@ -156,7 +162,13 @@ export async function deductIngredientsForMeal(mealId: number, servingMultiplier
     } catch (e) {
       if (e instanceof UnitConversionError) {
         // Cannot deduct — record as shortfall and move on.
-        shortfalls.push({ ingredientId: mi.ingredientId, ingredientName: ingredient.name, missing: needed, unit: mi.unit });
+        shortfalls.push({
+          ingredientId: mi.ingredientId,
+          ingredientName: ingredient.name,
+          missingQty: needed,
+          unit: mi.unit,
+          missingField: e.missing === "densityGPerMl" || e.missing === "gramsPerCount" ? e.missing : undefined,
+        });
         continue;
       }
       throw e;
@@ -171,7 +183,12 @@ export async function deductIngredientsForMeal(mealId: number, servingMultiplier
     );
 
     if (plan.shortfall > 0) {
-      shortfalls.push({ ingredientId: mi.ingredientId, ingredientName: ingredient.name, missing: plan.shortfall, unit: plan.shortfallUnit });
+      shortfalls.push({
+        ingredientId: mi.ingredientId,
+        ingredientName: ingredient.name,
+        missingQty: plan.shortfall,
+        unit: plan.shortfallUnit,
+      });
     }
   }
 
