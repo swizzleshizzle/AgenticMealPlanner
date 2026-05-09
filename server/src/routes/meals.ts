@@ -131,4 +131,13 @@ router.post("/:id/version", async (req, res) => {
   }
 });
 
+router.post("/:id/variant", async (req, res) => {
+  try {
+    const meal = await mealService.createVariant(Number(req.params.id), req.body);
+    res.status(201).json(meal);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 export default router;

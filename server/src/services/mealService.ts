@@ -342,6 +342,69 @@ export async function supersedeMeal(sourceId: number, data: Partial<CreateMealIn
   });
 }
 
+export async function createVariant(sourceId: number, data: Partial<CreateMealInput>) {
+  const source = await prisma.meal.findUniqueOrThrow({
+    where: { id: sourceId },
+    include: mealWithIngredients,
+  });
+
+  const { ingredients, instructions, canBatch, canFresh, ...rest } = data;
+  const capability = resolveCapabilityWrite(
+    { canBatch, canFresh },
+    { canBatch: source.canBatch, canFresh: source.canFresh },
+  ) ?? { canBatch: source.canBatch, canFresh: source.canFresh };
+
+  // Normalise instructions the same way supersedeMeal does.
+  const sourceInstructions: string[] = Array.isArray(source.instructions)
+    ? (source.instructions as string[])
+    : JSON.parse(String(source.instructions));
+
+  const created = await prisma.meal.create({
+    data: {
+      name:         data.name         ?? source.name,
+      description:  data.description  ?? source.description,
+      source:       source.source,
+      sourceUrl:    data.sourceUrl    ?? source.sourceUrl,
+      servings:     data.servings     ?? source.servings,
+      prepTime:     data.prepTime     ?? source.prepTime,
+      cookTime:     data.cookTime     ?? source.cookTime,
+      tags:         data.tags         ?? source.tags,
+      instructions: JSON.stringify(instructions ?? sourceInstructions),
+      calories:     data.calories     ?? source.calories,
+      proteinG:     data.proteinG     ?? source.proteinG,
+      carbsG:       data.carbsG       ?? source.carbsG,
+      fatG:         data.fatG         ?? source.fatG,
+      fiberG:       data.fiberG       ?? source.fiberG,
+      sodiumMg:     data.sodiumMg     ?? source.sodiumMg,
+      ...capability,
+      recipeId:      source.recipeId,
+      versionNumber: 1,
+      parentMealId:  null,
+      isDefault:     false,
+      ingredients: {
+        create: (ingredients ?? source.ingredients.map((mi) => ({
+          ingredientId: mi.ingredientId,
+          quantity:     mi.quantity,
+          unit:         mi.unit,
+          preparation:  mi.preparation ?? undefined,
+        }))).map((ing) => ({
+          ingredientId: ing.ingredientId,
+          quantity:     ing.quantity,
+          unit:         ing.unit,
+          preparation:  ing.preparation,
+        })),
+      },
+    },
+  });
+
+  const assetUpdate = await copyMealAssets(sourceId, created.id);
+  return prisma.meal.update({
+    where: { id: created.id },
+    data: assetUpdate,
+    include: mealWithIngredients,
+  });
+}
+
 // Returns the active variants of the family containing the given meal id,
 // ordered with the default first then by name. The argument may be any row
 // in the family; the server resolves to its recipe_id.
