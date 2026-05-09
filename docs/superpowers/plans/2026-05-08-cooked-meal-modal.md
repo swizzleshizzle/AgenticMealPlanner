@@ -1692,45 +1692,18 @@ git commit -m "feat(client): Planner edit-modal status=cooked opens CookConfirmM
 
 ---
 
-### Task 12: Docs — append "Implementation hooks" section to recipe-versioning plan
+### Task 12: Docs — verify recipe-versioning tie-in already exists
 
-**Files:**
-- Modify: `docs/superpowers/plans/2026-05-05-recipe-versioning.md`
+**Status:** Already complete via commit `2ff2a8a` (`docs(plan+spec): cross-plan note linking recipe-versioning to cooked-meal modal`). That commit added a top-level "Cross-plan reminder" to `docs/superpowers/plans/2026-05-05-recipe-versioning.md` and a full "Cross-plan: cooked-meal validation modal" section to `docs/superpowers/specs/2026-05-05-recipe-versioning-design.md` describing how the cook modal's per-cook overrides can later route into `supersedeMeal` / `createVariant`. That's the same commitment this task was going to deliver.
 
-The cooked-meal modal spec defers "save substitution for next time" to recipe-versioning. We add a section there so the seam is not forgotten when the recipe-versioning work continues.
-
-- [ ] **Step 1: Append the section**
-
-Open `docs/superpowers/plans/2026-05-05-recipe-versioning.md`. Append at the end of the document (use Read to confirm the trailing content first; preserve any existing terminator):
-
-```markdown
-
----
-
-## Implementation hooks: cooked-meal modal
-
-The cooked-meal validation modal (`docs/superpowers/specs/2026-05-08-cooked-meal-modal-design.md`) intentionally does NOT persist per-cook substitution memory. The "save these as the new default" affordance lives here, in the recipe-versioning flow, not in the cook modal.
-
-When this plan adds the recipe editor's "Save as new version" path:
-
-- Add a small "Save these as the new default" link to the cook-confirm modal footer, visible only when the user has edited recipe rows (qty changes, unit changes, ad-hoc additions, or unchecked recipe rows).
-- Clicking that link instead of "Mark cooked" opens `/recipes/:id/edit` pre-populated with the modal's current edited ingredient list, with `Save as new version` highlighted as the default action. The pending cook is preserved in URL state or localStorage so the user can return to confirm.
-- The cook itself proceeds independently. Whether the user takes the save-as-version path or just marks cooked, the per-cook deduction works the same — substitution memory and pantry deduction are independent.
-- No schema changes needed — the cook-confirm modal already produces the full final ingredient list in the shape the editor consumes.
-
-Files to touch when wiring:
-
-- `client/src/components/cookConfirm/CookConfirmModal.tsx` — add the link in the footer with a `onSaveAsVersion` prop.
-- `client/src/components/cookConfirm/CookConfirmProvider.tsx` — accept the prop and route the link's click to `navigate(/recipes/:id/edit?prefill=...)`.
-- `client/src/pages/RecipeEditor.tsx` (introduced by this plan) — accept the `?prefill=` query parameter and pre-populate the editor's ingredient list.
-```
-
-- [ ] **Step 2: Commit**
+- [ ] **Step 1: Verify the cross-plan note is present**
 
 ```bash
-git add docs/superpowers/plans/2026-05-05-recipe-versioning.md
-git commit -m "docs(plan): cooked-meal modal tie-in for recipe-versioning"
+git log --oneline --all -- docs/superpowers/plans/2026-05-05-recipe-versioning.md | head -5
+grep -A 2 "Cross-plan reminder" docs/superpowers/plans/2026-05-05-recipe-versioning.md
 ```
+
+Expected: `2ff2a8a` shows in the log, grep returns the cross-plan reminder block. No further code changes for this task.
 
 ---
 
