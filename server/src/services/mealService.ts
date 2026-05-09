@@ -439,6 +439,35 @@ export async function archiveMeal(id: number) {
   });
 }
 
+export async function unarchiveMeal(id: number) {
+  return prisma.meal.update({
+    where: { id },
+    data: { archivedAt: null },
+    include: mealWithIngredients,
+  });
+}
+
+export async function setDefault(id: number) {
+  return prisma.$transaction(async (tx) => {
+    const target = await tx.meal.findUniqueOrThrow({
+      where: { id },
+      select: { id: true, recipeId: true, archivedAt: true },
+    });
+    if (target.archivedAt !== null) {
+      throw Object.assign(new Error("cannot set archived meal as default"), { status: 409 });
+    }
+    await tx.meal.updateMany({
+      where: { recipeId: target.recipeId, isDefault: true, NOT: { id: target.id } },
+      data: { isDefault: false },
+    });
+    return tx.meal.update({
+      where: { id: target.id },
+      data: { isDefault: true },
+      include: mealWithIngredients,
+    });
+  });
+}
+
 // Archives every active row in the family containing the given meal id.
 // `id` may be any row in the family; the server resolves to its recipe_id.
 export async function archiveFamily(anyMemberId: number) {

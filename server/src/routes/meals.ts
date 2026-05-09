@@ -158,4 +158,16 @@ router.post("/:id/archive-family", async (req, res) => {
   }
 });
 
+router.post("/:id/unarchive", async (req, res) => {
+  try {
+    res.json(await mealService.unarchiveMeal(Number(req.params.id)));
+  } catch (e: any) { res.status(e.status ?? 500).json({ error: e.message }); }
+});
+
+router.post("/:id/set-default", async (req, res) => {
+  try {
+    res.json(await mealService.setDefault(Number(req.params.id)));
+  } catch (e: any) { res.status(e.status ?? 500).json({ error: e.message }); }
+});
+
 export default router;
