@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { copyFile, unlink } from "fs/promises";
+import { copyFile, unlink, stat } from "fs/promises";
 import path from "path";
 import { ensureMealDir, mealThumbPath, mealPdfPath, relStoragePath } from "./mediaStorage.js";
 import { runThumbnailJob } from "./pdfExtraction.js";
@@ -219,5 +219,66 @@ export async function extractMealThumbnail(mealId: number, force = false) {
     where: { id: mealId },
     data: { imagePath: source ? relStoragePath(thumbAbs) : null, imageSource: source },
     include: mealWithIngredients,
+  });
+}
+
+// Copies the photo + PDF (whichever exist) from src to dst. Used when
+// creating a new version or variant so the new row has its own self-contained
+// storage directory matching the rest of the codebase.
+export async function copyMealAssets(srcId: number, dstId: number): Promise<{
+  imagePath: string | null;
+  imageSource: string | null;
+  pdfPath: string | null;
+}> {
+  const src = await prisma.meal.findUniqueOrThrow({
+    where: { id: srcId },
+    select: { imagePath: true, imageSource: true, pdfPath: true },
+  });
+
+  await ensureMealDir(dstId);
+  const out: { imagePath: string | null; imageSource: string | null; pdfPath: string | null } = {
+    imagePath: null, imageSource: null, pdfPath: null,
+  };
+
+  if (src.imagePath) {
+    const srcAbs = path.resolve(process.cwd(), src.imagePath);
+    if (await fileExists(srcAbs)) {
+      const dstAbs = mealThumbPath(dstId);
+      await copyFile(srcAbs, dstAbs);
+      out.imagePath = relStoragePath(dstAbs);
+      out.imageSource = src.imageSource;
+    }
+  }
+
+  if (src.pdfPath) {
+    const srcAbs = path.resolve(process.cwd(), src.pdfPath);
+    if (await fileExists(srcAbs)) {
+      const dstAbs = mealPdfPath(dstId);
+      await copyFile(srcAbs, dstAbs);
+      out.pdfPath = relStoragePath(dstAbs);
+    }
+  }
+
+  return out;
+}
+
+async function fileExists(p: string): Promise<boolean> {
+  try { await stat(p); return true; } catch { return false; }
+}
+
+// Returns the active variants of the family containing the given meal id,
+// ordered with the default first then by name. The argument may be any row
+// in the family; the server resolves to its recipe_id.
+export async function getFamily(anyMemberId: number) {
+  const member = await prisma.meal.findUnique({
+    where: { id: anyMemberId },
+    select: { recipeId: true },
+  });
+  if (!member) return [];
+
+  return prisma.meal.findMany({
+    where: { recipeId: member.recipeId, archivedAt: null },
+    include: mealWithIngredients,
+    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
   });
 }
