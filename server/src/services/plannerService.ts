@@ -2,6 +2,8 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+type Tx = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
+
 const planWithMeals = {
   plannedMeals: {
     include: { meal: { include: { ingredients: { include: { ingredient: true } } } } },
@@ -51,13 +53,18 @@ export async function addPlannedMeal(planId: number, data: {
   });
 }
 
-export async function updatePlannedMeal(id: number, data: {
-  status?: string;
-  mealId?: number;
-  servings?: number;
-  cookStyle?: "cook_fresh" | "batch_prep" | "leftovers";
-}) {
-  return prisma.plannedMeal.update({
+export async function updatePlannedMeal(
+  id: number,
+  data: {
+    status?: string;
+    mealId?: number;
+    servings?: number;
+    cookStyle?: "cook_fresh" | "batch_prep" | "leftovers";
+  },
+  tx?: Tx,
+) {
+  const client: any = tx ?? prisma;
+  return client.plannedMeal.update({
     where: { id },
     data: data as any,
     include: { meal: { include: { ingredients: { include: { ingredient: true } } } } },
