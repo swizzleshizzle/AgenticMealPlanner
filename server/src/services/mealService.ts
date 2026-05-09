@@ -440,10 +440,33 @@ export async function archiveMeal(id: number) {
 }
 
 export async function unarchiveMeal(id: number) {
-  return prisma.meal.update({
-    where: { id },
-    data: { archivedAt: null },
-    include: mealWithIngredients,
+  return prisma.$transaction(async (tx) => {
+    const target = await tx.meal.findUniqueOrThrow({
+      where: { id },
+      select: { recipeId: true },
+    });
+    // If the family has no active default after unarchiving this row,
+    // promote this row to default so it surfaces in the recipes list. This
+    // covers the "unarchive a row from a fully-archived family" case;
+    // otherwise the meal would clear archivedAt but stay invisible because
+    // the list filter is (isDefault=true AND archivedAt IS NULL).
+    const activeDefault = await tx.meal.findFirst({
+      where: {
+        recipeId: target.recipeId,
+        isDefault: true,
+        archivedAt: null,
+        NOT: { id },
+      },
+      select: { id: true },
+    });
+    return tx.meal.update({
+      where: { id },
+      data: {
+        archivedAt: null,
+        ...(activeDefault ? {} : { isDefault: true }),
+      },
+      include: mealWithIngredients,
+    });
   });
 }
 
