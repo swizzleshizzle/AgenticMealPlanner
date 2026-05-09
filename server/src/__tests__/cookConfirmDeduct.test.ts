@@ -139,7 +139,32 @@ describe("deductIngredientsForMeal — overrides path", () => {
       { ingredientId: honey.id, quantity: 10, unit: "g" },
     ]);
 
-    expect(result.shortfalls.map((s) => s.reason).sort()).toEqual(["insufficient", "no_density", "no_pantry"]);
+    const byId = new Map(result.shortfalls.map((s) => [s.ingredientId, s]));
+    expect(result.shortfalls).toHaveLength(3);
+    expect(byId.get(onion.id)).toEqual({
+      ingredientId: onion.id,
+      ingredientName: "onion",
+      requestedQuantity: 100,
+      requestedUnit: "g",
+      availableQuantity: 50,
+      reason: "insufficient",
+    });
+    expect(byId.get(ginger.id)).toEqual({
+      ingredientId: ginger.id,
+      ingredientName: "ginger",
+      requestedQuantity: 5,
+      requestedUnit: "g",
+      availableQuantity: 0,
+      reason: "no_pantry",
+    });
+    expect(byId.get(honey.id)).toEqual({
+      ingredientId: honey.id,
+      ingredientName: "honey",
+      requestedQuantity: 10,
+      requestedUnit: "g",
+      availableQuantity: 0,
+      reason: "no_density",
+    });
     const chickenBatch = await prisma.pantryBatch.findFirst({ where: { ingredientId: chicken.id, consumedAt: null } });
     expect(chickenBatch?.quantity).toBeCloseTo(300, 5);
   });

@@ -143,6 +143,10 @@ export interface DeductResult {
   shortfalls: DeductShortfall[];
 }
 
+// Prisma does not export a TransactionClient type publicly. The Parameters<>
+// trick captures the interactive-transaction callback's argument type, but
+// it loses the model accessor types — hence the `(tx as any).model.method`
+// casts in runDeduction below. Keep this localized; do not propagate.
 type Tx = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
 
 export async function deductIngredientsForMeal(
@@ -167,11 +171,7 @@ async function runDeduction(
 ): Promise<DeductResult> {
   let lines: Array<{ ingredientId: number; quantity: number; unit: string }>;
   if (overrides !== undefined) {
-    lines = overrides.map((o) => ({
-      ingredientId: o.ingredientId,
-      quantity: o.quantity,
-      unit: o.unit,
-    }));
+    lines = overrides;
   } else {
     const mealIngredients = await (tx as any).mealIngredient.findMany({
       where: { mealId },
@@ -189,7 +189,9 @@ async function runDeduction(
     const ingredient = await (tx as any).ingredient.findUnique({
       where: { id: line.ingredientId },
     });
-    if (!ingredient) continue;
+    if (!ingredient) {
+      throw new Error(`Unknown ingredientId in deduction: ${line.ingredientId}`);
+    }
 
     const batchRows = await (tx as any).pantryBatch.findMany({
       where: { ingredientId: line.ingredientId, consumedAt: null },
@@ -251,12 +253,15 @@ async function runDeduction(
     }
 
     if (plan.shortfall > 0) {
+      // selectBatchesToDrain.shortfallUnit is always the requested unit, so
+      // (requested - shortfall) is the amount actually drained, in the same unit.
+      const drained = line.quantity - plan.shortfall;
       shortfalls.push({
         ingredientId: line.ingredientId,
         ingredientName: ingredient.name,
         requestedQuantity: line.quantity,
         requestedUnit: line.unit,
-        availableQuantity: line.quantity - plan.shortfall,
+        availableQuantity: drained,
         reason: "insufficient",
       });
     }
