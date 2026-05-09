@@ -140,4 +140,13 @@ router.post("/:id/variant", async (req, res) => {
   }
 });
 
+router.post("/:id/archive", async (req, res) => {
+  try {
+    const meal = await mealService.archiveMeal(Number(req.params.id));
+    res.json(meal);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 export default router;
