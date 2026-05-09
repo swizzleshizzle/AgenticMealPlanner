@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Flame, Leaf, Upload } from "lucide-react";
+import { Search, Flame, Leaf, Upload, Plus } from "lucide-react";
 import { getMeals, type Meal } from "../api/meals";
 import MealCard from "../components/MealCard";
 import Button from "../components/ui/Button";
@@ -44,9 +44,14 @@ export default function Recipes() {
           </div>
           <h1 className="text-[26px] sm:text-[30px] font-semibold -tracking-[0.02em] text-ink-1">Recipes</h1>
         </div>
-        <Button variant="primary" icon={Upload} onClick={() => navigate("/recipes/import")}>
-          Import recipe
-        </Button>
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="ghost" icon={Plus} onClick={() => navigate("/recipes/new")}>
+            New recipe
+          </Button>
+          <Button variant="primary" icon={Upload} onClick={() => navigate("/recipes/import")}>
+            Import recipe
+          </Button>
+        </div>
       </div>
 
       <div className="flex gap-2.5 items-center flex-wrap">

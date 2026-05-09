@@ -12,6 +12,8 @@ import {
   Camera,
   FileUp,
   RefreshCw,
+  Pencil,
+  GitBranch,
 } from "lucide-react";
 import { deleteMeal, getMeal, uploadMealPhoto, uploadMealPdf, extractMealThumbnail, type Meal } from "../api/meals";
 import AddToPlanModal from "../components/AddToPlanModal";
@@ -140,6 +142,12 @@ export default function RecipeDetail() {
                 Original PDF
               </Button>
             )}
+            <Button variant="ghost" icon={Pencil} onClick={() => navigate(`/recipes/${meal.id}/edit`)}>
+              Edit
+            </Button>
+            <Button variant="ghost" icon={GitBranch} onClick={() => navigate(`/recipes/${meal.id}/variant`)}>
+              Create variant
+            </Button>
           </div>
           <MealAssetActions meal={meal} onUpdated={setMeal} />
         </div>
