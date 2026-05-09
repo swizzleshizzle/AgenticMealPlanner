@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
 import * as plannerService from "../services/plannerService.js";
-import { deductIngredientsForMeal } from "../services/pantryService.js";
+import { deductIngredientsForMeal, type DeductResult } from "../services/pantryService.js";
 import { generateWeeklyPlan } from "../claude/mealPlanner.js";
 
 const router = Router();
@@ -96,7 +96,7 @@ router.put("/:planId/meals/:mealId", async (req, res) => {
 
   const result = await prisma.$transaction(async (tx) => {
     const updated = await plannerService.updatePlannedMeal(mealId, updatePayload, tx);
-    let deduction: { shortfalls: any[] } = { shortfalls: [] };
+    let deduction: DeductResult = { shortfalls: [] };
     if (isCookTransition) {
       const multiplier = updated.servings / updated.meal.servings;
       deduction = await deductIngredientsForMeal(updated.mealId, multiplier, overrides, tx);

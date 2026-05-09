@@ -96,6 +96,7 @@ describe("PUT /api/plans/:planId/meals/:mealId — cooked transition with overri
       });
 
     expect(res.status).toBe(400);
+    expect(res.body.error).toBe("overrides only accepted with status=cooked");
   });
 
   it("rejects non-array overrides with 400", async () => {
@@ -109,6 +110,7 @@ describe("PUT /api/plans/:planId/meals/:mealId — cooked transition with overri
       });
 
     expect(res.status).toBe(400);
+    expect(res.body.error).toBe("overrides must be an array");
   });
 
   it("rejects duplicate ingredientId rows with 400", async () => {
@@ -125,6 +127,7 @@ describe("PUT /api/plans/:planId/meals/:mealId — cooked transition with overri
       });
 
     expect(res.status).toBe(400);
+    expect(res.body.error).toBe("duplicate ingredientId in overrides");
   });
 
   it("rejects qty<=0 with 400", async () => {
@@ -138,6 +141,7 @@ describe("PUT /api/plans/:planId/meals/:mealId — cooked transition with overri
       });
 
     expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid override row");
   });
 
   it("rejects unknown ingredientId with 400", async () => {
@@ -151,6 +155,7 @@ describe("PUT /api/plans/:planId/meals/:mealId — cooked transition with overri
       });
 
     expect(res.status).toBe(400);
+    expect(res.body.error).toBe("unknown ingredientId in overrides");
   });
 
   it("does NOT re-deduct when status update is applied to an already-cooked meal", async () => {
@@ -193,5 +198,16 @@ describe("PUT /api/plans/:planId/meals/:mealId — cooked transition with overri
     const chickenBatch = await prisma.pantryBatch.findFirst({ where: { ingredientId: chicken.id, consumedAt: null } });
     // Recipe is 400g for 4 servings; planned 2 servings → multiplier 0.5 → 200g deducted.
     expect(chickenBatch?.quantity).toBeCloseTo(300, 5);
+  });
+
+  it("returns 404 when the planned meal does not exist", async () => {
+    const { plan } = await seed();
+
+    const res = await request(app)
+      .put(`/api/plans/${plan.id}/meals/99999`)
+      .send({ status: "cooked" });
+
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: "Planned meal not found" });
   });
 });
