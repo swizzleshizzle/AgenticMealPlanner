@@ -149,4 +149,13 @@ router.post("/:id/archive", async (req, res) => {
   }
 });
 
+router.post("/:id/archive-family", async (req, res) => {
+  try {
+    const result = await mealService.archiveFamily(Number(req.params.id));
+    res.json(result);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 export default router;
