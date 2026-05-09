@@ -66,7 +66,11 @@ export default function PantryDrawer({ card, onClose, onChanged }: Props) {
           <section>
             <div className="text-[11px] uppercase tracking-[0.08em] text-ink-3 font-semibold mb-1.5">Summary</div>
             <div className="text-[13px] text-ink-2 flex flex-col gap-1">
-              <div>Total on hand: {card.canonicalTotal ? `${card.partialTotal ? "~" : ""}${card.canonicalTotal.qty.toFixed(2)} ${card.canonicalTotal.unit}` : "—"}</div>
+              <div>
+                On hand: {card.totalsByUnit.length === 0
+                  ? "—"
+                  : card.totalsByUnit.map((t) => `${formatQty(t.qty)} ${t.unit}`).join(" · ")}
+              </div>
               <div>Soonest expiration: {card.nextExpirationDays != null ? `${card.nextExpirationDays}d` : "—"}</div>
               <div>Running low: {card.isLowStock ? "yes" : "no"}</div>
             </div>
@@ -138,4 +142,9 @@ export default function PantryDrawer({ card, onClose, onChanged }: Props) {
       </aside>
     </>
   );
+}
+
+function formatQty(q: number): string {
+  if (Math.abs(q - Math.round(q)) < 1e-6) return String(Math.round(q));
+  return q.toFixed(2).replace(/\.?0+$/, "");
 }
