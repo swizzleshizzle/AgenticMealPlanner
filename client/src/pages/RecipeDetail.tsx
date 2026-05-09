@@ -8,12 +8,14 @@ import {
   Users,
   CalendarPlus,
   FileText,
-  Trash2,
   Camera,
   FileUp,
   RefreshCw,
+  Pencil,
+  GitBranch,
+  MoreHorizontal,
 } from "lucide-react";
-import { deleteMeal, getMeal, uploadMealPhoto, uploadMealPdf, extractMealThumbnail, type Meal } from "../api/meals";
+import { getMeal, uploadMealPhoto, uploadMealPdf, extractMealThumbnail, getMealFamily, archiveMeal, archiveFamily, setDefaultMeal, type Meal } from "../api/meals";
 import AddToPlanModal from "../components/AddToPlanModal";
 import { useToast } from "../components/ui/ToastProvider";
 import type { PlannedMeal } from "../api/plans";
@@ -45,9 +47,16 @@ export default function RecipeDetail() {
   const navigate = useNavigate();
   const [meal, setMeal] = useState<Meal | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [family, setFamily] = useState<Meal[]>([]);
+  const [menuOpen, setMenuOpen] = useState(false);
   const toast = useToast();
 
   useEffect(() => { getMeal(Number(id)).then(setMeal).catch(() => setMeal(null)); }, [id]);
+
+  useEffect(() => {
+    if (!meal) return;
+    getMealFamily(meal.id).then(setFamily).catch(() => setFamily([]));
+  }, [meal?.id]);
 
   if (!meal) {
     return <div className="text-ink-3 text-[14px]">Loading recipe…</div>;
@@ -67,12 +76,51 @@ export default function RecipeDetail() {
         >
           <ChevronLeft size={14} /> Back to recipes
         </button>
-        <button
-          onClick={async () => { await deleteMeal(meal.id); navigate("/recipes"); }}
-          className="inline-flex items-center gap-1.5 text-[12px] text-danger hover:underline"
-        >
-          <Trash2 size={13} /> Delete
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setMenuOpen((v) => !v)}
+            className="inline-flex items-center gap-1.5 text-[12px] text-ink-3 hover:text-ink-1"
+          >
+            <MoreHorizontal size={16} /> More
+          </button>
+          {menuOpen && (
+            <div className="absolute right-0 top-7 z-10 bg-surface-1 border border-line rounded-[10px] shadow-[var(--shadow-card)] min-w-[200px] py-1.5">
+              {!meal.isDefault && (
+                <button
+                  onClick={async () => {
+                    const updated = await setDefaultMeal(meal.id);
+                    setMeal(updated);
+                    setMenuOpen(false);
+                    toast({ message: `Set "${updated.name}" as default variant` });
+                  }}
+                  className="w-full text-left px-3 py-2 text-[13px] hover:bg-surface-2"
+                >
+                  Set as default
+                </button>
+              )}
+              <button
+                onClick={async () => {
+                  if (!window.confirm(`Archive this variant ("${meal.name}")?`)) return;
+                  await archiveMeal(meal.id);
+                  navigate("/recipes");
+                }}
+                className="w-full text-left px-3 py-2 text-[13px] hover:bg-surface-2"
+              >
+                Archive variant
+              </button>
+              <button
+                onClick={async () => {
+                  if (!window.confirm(`Archive this recipe and all ${family.length} variant${family.length === 1 ? "" : "s"}?`)) return;
+                  await archiveFamily(meal.id);
+                  navigate("/recipes");
+                }}
+                className="w-full text-left px-3 py-2 text-[13px] text-danger hover:bg-surface-2"
+              >
+                Archive recipe (whole family)
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-7 items-start">
@@ -86,6 +134,29 @@ export default function RecipeDetail() {
           <PhotoTile tone={tone} label={meal.name.toLowerCase()} aspect="4 / 5" round={18} />
         )}
         <div className="flex flex-col gap-3.5">
+          {family.length > 1 && (
+            <div className="flex gap-1.5 flex-wrap">
+              {family.map((v) => {
+                const active = v.id === meal.id;
+                return (
+                  <button
+                    key={v.id}
+                    onClick={() => navigate(`/recipes/${v.id}`)}
+                    className={`text-[12px] px-3 py-[5px] rounded-full font-medium border transition ${
+                      active ? "bg-accent text-accent-on border-accent" : "bg-surface-1 text-ink-2 border-line hover:border-accent-line"
+                    }`}
+                  >
+                    {v.isDefault ? "★ " : ""}{v.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {meal.archivedAt && (
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-warn-soft border border-warn-line text-warn-ink text-[12px]">
+              Archived {new Date(meal.archivedAt).toLocaleDateString()}
+            </div>
+          )}
           <div className="flex gap-1.5 flex-wrap">
             {meal.canBatch && (
               <Pill tone="prep" size="md">
@@ -140,6 +211,12 @@ export default function RecipeDetail() {
                 Original PDF
               </Button>
             )}
+            <Button variant="ghost" icon={Pencil} onClick={() => navigate(`/recipes/${meal.id}/edit`)}>
+              Edit
+            </Button>
+            <Button variant="ghost" icon={GitBranch} onClick={() => navigate(`/recipes/${meal.id}/variant`)}>
+              Create variant
+            </Button>
           </div>
           <MealAssetActions meal={meal} onUpdated={setMeal} />
         </div>

@@ -14,6 +14,10 @@ router.get("/", async (_req, res) => {
   res.json(meals);
 });
 
+router.get("/archived", async (_req, res) => {
+  res.json(await mealService.getArchivedMeals());
+});
+
 router.get("/:id", async (req, res) => {
   const meal = await mealService.getMealById(Number(req.params.id));
   if (!meal) {
@@ -115,6 +119,59 @@ router.post("/import", upload.single("file"), async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: "Failed to parse recipe", details: err.message });
   }
+});
+
+router.get("/:id/family", async (req, res) => {
+  const family = await mealService.getFamily(Number(req.params.id));
+  res.json(family);
+});
+
+router.post("/:id/version", async (req, res) => {
+  try {
+    const meal = await mealService.supersedeMeal(Number(req.params.id), req.body);
+    res.status(201).json(meal);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/:id/variant", async (req, res) => {
+  try {
+    const meal = await mealService.createVariant(Number(req.params.id), req.body);
+    res.status(201).json(meal);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/:id/archive", async (req, res) => {
+  try {
+    const meal = await mealService.archiveMeal(Number(req.params.id));
+    res.json(meal);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/:id/archive-family", async (req, res) => {
+  try {
+    const result = await mealService.archiveFamily(Number(req.params.id));
+    res.json(result);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/:id/unarchive", async (req, res) => {
+  try {
+    res.json(await mealService.unarchiveMeal(Number(req.params.id)));
+  } catch (e: any) { res.status(e.status ?? 500).json({ error: e.message }); }
+});
+
+router.post("/:id/set-default", async (req, res) => {
+  try {
+    res.json(await mealService.setDefault(Number(req.params.id)));
+  } catch (e: any) { res.status(e.status ?? 500).json({ error: e.message }); }
 });
 
 export default router;
