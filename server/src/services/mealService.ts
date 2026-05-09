@@ -13,10 +13,22 @@ const mealWithIngredients = {
 };
 
 export async function getAllMeals() {
-  return prisma.meal.findMany({
+  const rows = await prisma.meal.findMany({
+    where: { isDefault: true, archivedAt: null },
     include: mealWithIngredients,
     orderBy: { name: "asc" },
   });
+
+  // Annotate each row with a count of *active* variants in its family.
+  const recipeIds = rows.map((r) => r.recipeId);
+  const variantCounts = await prisma.meal.groupBy({
+    by: ["recipeId"],
+    where: { recipeId: { in: recipeIds }, archivedAt: null },
+    _count: { _all: true },
+  });
+  const countByRecipe = new Map(variantCounts.map((g) => [g.recipeId, g._count._all]));
+
+  return rows.map((r) => ({ ...r, variantCount: countByRecipe.get(r.recipeId) ?? 1 }));
 }
 
 export async function getMealById(id: number) {
@@ -84,23 +96,32 @@ export async function createMeal(data: CreateMealInput) {
   const { ingredients, instructions, canBatch, canFresh, ...rest } = data;
   const capability = resolveCapabilityWrite({ canBatch, canFresh }, null)!;
 
-  return prisma.meal.create({
-    data: {
-      ...rest,
-      ...capability,
-      instructions: JSON.stringify(instructions),
-      ingredients: ingredients
-        ? {
-            create: ingredients.map((ing) => ({
-              ingredientId: ing.ingredientId,
-              quantity: ing.quantity,
-              unit: ing.unit,
-              preparation: ing.preparation,
-            })),
-          }
-        : undefined,
-    },
-    include: mealWithIngredients,
+  return prisma.$transaction(async (tx) => {
+    const created = await tx.meal.create({
+      data: {
+        ...rest,
+        ...capability,
+        instructions: JSON.stringify(instructions),
+        recipeId: 0, // overwritten below; non-null required.
+        ingredients: ingredients
+          ? {
+              create: ingredients.map((ing) => ({
+                ingredientId: ing.ingredientId,
+                quantity: ing.quantity,
+                unit: ing.unit,
+                preparation: ing.preparation,
+              })),
+            }
+          : undefined,
+      },
+      include: mealWithIngredients,
+    });
+
+    return tx.meal.update({
+      where: { id: created.id },
+      data: { recipeId: created.id },
+      include: mealWithIngredients,
+    });
   });
 }
 
