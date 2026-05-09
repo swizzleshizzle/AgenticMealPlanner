@@ -266,6 +266,82 @@ async function fileExists(p: string): Promise<boolean> {
   try { await stat(p); return true; } catch { return false; }
 }
 
+export async function supersedeMeal(sourceId: number, data: Partial<CreateMealInput>) {
+  const source = await prisma.meal.findUniqueOrThrow({
+    where: { id: sourceId },
+    include: mealWithIngredients,
+  });
+
+  const { ingredients, instructions, canBatch, canFresh, ...rest } = data;
+  const capability = resolveCapabilityWrite(
+    { canBatch, canFresh },
+    { canBatch: source.canBatch, canFresh: source.canFresh },
+  ) ?? { canBatch: source.canBatch, canFresh: source.canFresh };
+
+  // instructions may be a parsed array or a JSON string depending on the
+  // Prisma runtime; normalise to a plain array before JSON.stringify.
+  const sourceInstructions: string[] = Array.isArray(source.instructions)
+    ? (source.instructions as string[])
+    : JSON.parse(String(source.instructions));
+
+  const created = await prisma.$transaction(async (tx) => {
+    // Insert the new version: default=true, parent=source, version+1.
+    const inserted = await tx.meal.create({
+      data: {
+        name:         data.name         ?? source.name,
+        description:  data.description  ?? source.description,
+        source:       source.source,
+        sourceUrl:    data.sourceUrl    ?? source.sourceUrl,
+        servings:     data.servings     ?? source.servings,
+        prepTime:     data.prepTime     ?? source.prepTime,
+        cookTime:     data.cookTime     ?? source.cookTime,
+        tags:         data.tags         ?? source.tags,
+        instructions: JSON.stringify(instructions ?? sourceInstructions),
+        calories:     data.calories     ?? source.calories,
+        proteinG:     data.proteinG     ?? source.proteinG,
+        carbsG:       data.carbsG       ?? source.carbsG,
+        fatG:         data.fatG         ?? source.fatG,
+        fiberG:       data.fiberG       ?? source.fiberG,
+        sodiumMg:     data.sodiumMg     ?? source.sodiumMg,
+        ...capability,
+        recipeId:      source.recipeId,
+        versionNumber: source.versionNumber + 1,
+        parentMealId:  source.id,
+        isDefault:     true,
+        ingredients: {
+          create: (ingredients ?? source.ingredients.map((mi) => ({
+            ingredientId: mi.ingredientId,
+            quantity:     mi.quantity,
+            unit:         mi.unit,
+            preparation:  mi.preparation ?? undefined,
+          }))).map((ing) => ({
+            ingredientId: ing.ingredientId,
+            quantity:     ing.quantity,
+            unit:         ing.unit,
+            preparation:  ing.preparation,
+          })),
+        },
+      },
+    });
+
+    // Demote + archive the previous default in the same transaction.
+    await tx.meal.update({
+      where: { id: source.id },
+      data: { isDefault: false, archivedAt: new Date() },
+    });
+
+    return inserted;
+  });
+
+  // Copy assets after the transaction commits — file IO outside the txn.
+  const assetUpdate = await copyMealAssets(sourceId, created.id);
+  return prisma.meal.update({
+    where: { id: created.id },
+    data: assetUpdate,
+    include: mealWithIngredients,
+  });
+}
+
 // Returns the active variants of the family containing the given meal id,
 // ordered with the default first then by name. The argument may be any row
 // in the family; the server resolves to its recipe_id.
