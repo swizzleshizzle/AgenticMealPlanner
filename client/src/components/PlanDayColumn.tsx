@@ -30,7 +30,14 @@ export default function PlanDayColumn({ day, meals, onMarkCooked, onSkip }: Prop
                 {pm.cookStyle === "batch_prep" && <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">Prep</span>}
                 {pm.cookStyle === "leftovers"  && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Leftovers</span>}
               </div>
-              <p className="font-medium text-gray-900">{pm.meal.name}</p>
+              <p className="font-medium text-gray-900 inline-flex items-center gap-1.5">
+                {pm.meal.name}
+                {pm.meal.archivedAt && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-warn-soft text-warn-ink text-[10px] font-medium">
+                    archived
+                  </span>
+                )}
+              </p>
               <p className="text-xs text-gray-400">{pm.servings} servings</p>
               {pm.status === "planned" && (
                 <div className="flex gap-2 mt-2">
