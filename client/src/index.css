@@ -144,6 +144,12 @@ button { font-family: inherit; }
 @keyframes amp-fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 .amp-fade-in { animation: amp-fade-in 0.25s ease both; }
 
+@keyframes amp-slide-in-right {
+  from { transform: translateX(20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.amp-slide-in-right { animation: amp-slide-in-right 180ms ease-out; }
+
 /* hide scrollbars on horizontal day strip while keeping it scrollable */
 .amp-no-scrollbar::-webkit-scrollbar { display: none; }
 .amp-no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

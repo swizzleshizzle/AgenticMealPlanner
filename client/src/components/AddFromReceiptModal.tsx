@@ -225,7 +225,7 @@ function buildInitialRows(items: ParsedReceiptItem[], ingredients: Ingredient[])
     kind: it.kind,
     categoryGuess: it.categoryGuess ?? null,
     locationGuess: it.locationGuess ?? "pantry",
-    expirationDate: null,
+    expirationDate: it.suggestedExpiration ?? null,
     isCommitted: it.kind === "food",
     showCreateForm: false,
     matchedIngredientName: it.ingredientId != null ? ingById.get(it.ingredientId) ?? null : null,

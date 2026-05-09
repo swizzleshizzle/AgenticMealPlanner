@@ -8,6 +8,11 @@ router.post("/generate/:planId", async (req, res) => {
   res.status(201).json(items);
 });
 
+router.get("/low-stock", async (_req, res) => {
+  const suggestions = await shoppingService.getLowStockSuggestions();
+  res.json(suggestions);
+});
+
 router.get("/:planId", async (req, res) => {
   const items = await shoppingService.getShoppingList(Number(req.params.planId));
   res.json(items);

@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { aggregateCards } from "./pantryAggregation.js";
 
 const prisma = new PrismaClient();
 
@@ -71,7 +72,7 @@ export async function generateShoppingList(planId: number) {
     include: { meal: { include: { ingredients: true } } },
   });
 
-  const pantryItems = await prisma.pantryItem.findMany();
+  const pantryItems = await prisma.pantryBatch.findMany({ where: { consumedAt: null } });
 
   const aggregated = aggregateShoppingItems({
     plannedMeals: plannedMeals.map((pm) => ({
@@ -123,4 +124,22 @@ export async function toggleShoppingItem(id: number, checked: boolean) {
     data: { checked },
     include: { ingredient: true },
   });
+}
+
+export async function getLowStockSuggestions() {
+  const [ingredientRows, batchRows] = await Promise.all([
+    prisma.ingredient.findMany({ where: { isOneOff: false } }),
+    prisma.pantryBatch.findMany({ where: { consumedAt: null } }),
+  ]);
+  const cards = aggregateCards({ ingredients: ingredientRows, batches: batchRows });
+  return cards
+    .filter((c) => c.isLowStock)
+    .map((c) => ({
+      ingredientId: c.ingredient.id,
+      name: c.ingredient.name,
+      currentQty: c.canonicalTotal?.qty ?? 0,
+      currentUnit: c.canonicalTotal?.unit ?? c.ingredient.defaultUnit,
+      threshold: c.ingredient.lowStockThreshold,
+      thresholdUnit: c.ingredient.lowStockUnit,
+    }));
 }

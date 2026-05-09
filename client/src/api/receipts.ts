@@ -20,6 +20,7 @@ export interface ParsedReceiptItem {
   defaultUnitGuess?: string | null;
   ingredientId?: number | null;
   matchConfidence?: "high" | "low" | null;
+  suggestedExpiration?: string | null;
 }
 
 export interface ParsedReceipt {

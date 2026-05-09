@@ -1,6 +1,6 @@
 import type { ReactNode, CSSProperties } from "react";
 
-type Tone = "neutral" | "accent" | "prep" | "fresh" | "warn" | "ghost";
+type Tone = "neutral" | "accent" | "prep" | "fresh" | "warn" | "danger" | "ghost";
 type Size = "sm" | "md" | "lg";
 
 const TONE: Record<Tone, string> = {
@@ -9,6 +9,7 @@ const TONE: Record<Tone, string> = {
   prep:    "bg-prep-soft text-prep-ink border-prep-line",
   fresh:   "bg-fresh-soft text-fresh-ink border-fresh-line",
   warn:    "bg-warn-soft text-warn-ink border-warn-line",
+  danger:  "bg-warn-soft text-danger border-line",
   ghost:   "bg-transparent text-ink-2 border-line",
 };
 

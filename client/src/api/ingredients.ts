@@ -1,12 +1,48 @@
+// client/src/api/ingredients.ts
 import { apiFetch } from "./client";
+
+export type IngredientCategory =
+  | "produce" | "protein" | "dairy" | "pantry_staple" | "grain"
+  | "spice" | "condiment" | "frozen" | "other";
+
+export type PantryLocation = "fridge" | "freezer" | "pantry";
 
 export interface Ingredient {
   id: number;
   name: string;
-  category: string;
+  category: IngredientCategory;
   defaultUnit: string;
+  defaultLocation: PantryLocation | null;
+  densityGPerMl: number | null;
+  gramsPerCount: number | null;
+  shelfLifeFridgeDays: number | null;
+  shelfLifeFreezerDays: number | null;
+  shelfLifePantryDays: number | null;
+  lowStockThreshold: number | null;
+  lowStockUnit: string | null;
+  isOneOff: boolean;
 }
 
-export const getIngredients = () => apiFetch<Ingredient[]>("/ingredients");
-export const createIngredient = (data: { name: string; category: string; defaultUnit: string }) =>
+export interface IngredientUpdate {
+  name?: string;
+  category?: IngredientCategory;
+  defaultUnit?: string;
+  defaultLocation?: PantryLocation | null;
+  densityGPerMl?: number | null;
+  gramsPerCount?: number | null;
+  shelfLifeFridgeDays?: number | null;
+  shelfLifeFreezerDays?: number | null;
+  shelfLifePantryDays?: number | null;
+  lowStockThreshold?: number | null;
+  lowStockUnit?: string | null;
+  isOneOff?: boolean;
+}
+
+export const getIngredients = (opts: { includeOneOffs?: boolean } = {}) =>
+  apiFetch<Ingredient[]>(`/ingredients${opts.includeOneOffs ? "?includeOneOffs=true" : ""}`);
+
+export const createIngredient = (data: Partial<Ingredient> & { name: string; category: IngredientCategory; defaultUnit: string }) =>
   apiFetch<Ingredient>("/ingredients", { method: "POST", body: JSON.stringify(data) });
+
+export const updateIngredient = (id: number, data: IngredientUpdate) =>
+  apiFetch<Ingredient>(`/ingredients/${id}`, { method: "PATCH", body: JSON.stringify(data) });

@@ -1,8 +1,10 @@
 import { PrismaClient, Prisma } from "@prisma/client";
+import type { PantryLocation } from "@prisma/client";
 import { runFirstPass, runRescuePass, type ReceiptParseInput } from "../claude/receiptParser.js";
 import { fuzzyMatchIngredient, type IngredientCandidate } from "../claude/ingredientMatcher.js";
 import { stashReceiptParse, peekReceiptParse, popReceiptParse, type ParsedReceiptPayload } from "./receiptParseSessions.js";
 import { moveSourceIntoReceipt } from "./receiptStorage.js";
+import { suggestExpirationDate } from "./pantryBatchService.js";
 
 const prisma = new PrismaClient();
 
@@ -67,67 +69,36 @@ export async function parseReceipt(input: ReceiptParseInput): Promise<ParseResul
     }
   }
 
+  const matchedIds = parsed.items
+    .map((i) => i.ingredientId)
+    .filter((x): x is number => x != null);
+  const matchedIngredients = await prisma.ingredient.findMany({
+    where: { id: { in: matchedIds } },
+    select: { id: true, shelfLifeFridgeDays: true, shelfLifeFreezerDays: true, shelfLifePantryDays: true },
+  });
+  const byId = new Map(matchedIngredients.map((i) => [i.id, i]));
+
+  for (const item of parsed.items) {
+    if (item.ingredientId == null || !item.locationGuess) {
+      item.suggestedExpiration = null;
+      continue;
+    }
+    const ing = byId.get(item.ingredientId);
+    if (!ing) { item.suggestedExpiration = null; continue; }
+    const days =
+      item.locationGuess === "fridge" ? ing.shelfLifeFridgeDays
+      : item.locationGuess === "freezer" ? ing.shelfLifeFreezerDays
+      : ing.shelfLifePantryDays;
+    if (days == null) { item.suggestedExpiration = null; continue; }
+    const tripDate = new Date(parsed.tripDate);
+    const exp = new Date(tripDate.getTime() + days * 86400000);
+    item.suggestedExpiration = exp.toISOString().slice(0, 10);
+  }
+
   const sourcePath = input.kind === "text" ? null : input.path;
   const rawText = input.kind === "text" ? input.text : null;
   const parseId = stashReceiptParse(parsed, sourcePath, rawText);
   return { parseId, payload: parsed };
-}
-
-// ---------------------------------------------------------------------------
-// Pure helpers (extracted for unit testing).
-// ---------------------------------------------------------------------------
-
-export interface ExistingPantryItem {
-  id: number;
-  ingredientId: number;
-  quantity: number;
-  unit: string;
-  location: string;
-  expirationDate: Date | null;
-}
-
-export interface IncomingPantryRow {
-  ingredientId: number;
-  quantity: number;
-  unit: string;
-  location: string;
-  expirationDate: Date | null;
-}
-
-export type MergeDecision =
-  | { action: "create" }
-  | { action: "increment"; pantryItemId: number; newQuantity: number; newExpirationDate: Date | null };
-
-export function computeMergeDecision(
-  incoming: IncomingPantryRow,
-  existing: ExistingPantryItem[],
-): MergeDecision {
-  const match = existing.find(
-    (e) =>
-      e.ingredientId === incoming.ingredientId &&
-      e.unit === incoming.unit &&
-      e.location === incoming.location,
-  );
-  if (!match) return { action: "create" };
-
-  // FIFO expiration bias: if either side has a date and the other is null,
-  // take the non-null. If both have dates, take the earlier one.
-  let newExpirationDate: Date | null;
-  if (match.expirationDate && incoming.expirationDate) {
-    newExpirationDate =
-      incoming.expirationDate < match.expirationDate
-        ? incoming.expirationDate
-        : match.expirationDate;
-  } else {
-    newExpirationDate = match.expirationDate ?? incoming.expirationDate;
-  }
-
-  return {
-    action: "increment",
-    pantryItemId: match.id,
-    newQuantity: match.quantity + incoming.quantity,
-    newExpirationDate,
-  };
 }
 
 export function weeklyWindow(reference: Date): { weekStart: Date; weekEnd: Date } {
@@ -207,20 +178,7 @@ export async function commitReceipt(input: CommitInput) {
     }
 
     // 3. For each item the user kept (isCommitted), resolve the ingredient,
-    //    create the ReceiptItem row, then merge into pantry if it's food.
-    const existingPantry = await tx.pantryItem.findMany({
-      select: { id: true, ingredientId: true, quantity: true, unit: true, location: true, expirationDate: true },
-    });
-    // Mutable working copy so successive merges within the same commit see prior writes.
-    const workingPantry: ExistingPantryItem[] = existingPantry.map((p) => ({
-      id: p.id,
-      ingredientId: p.ingredientId,
-      quantity: Number(p.quantity),
-      unit: p.unit,
-      location: p.location,
-      expirationDate: p.expirationDate,
-    }));
-
+    //    create the ReceiptItem row, then create a fresh PantryBatch if it's food.
     for (const edit of input.items) {
       const stashItem = stashed.payload.items[edit.index];
       if (!stashItem) continue; // out-of-range index — skip silently
@@ -241,7 +199,7 @@ export async function commitReceipt(input: CommitInput) {
       }
 
       // 3b. Create the ReceiptItem row.
-      await tx.receiptItem.create({
+      const receiptItemRow = await tx.receiptItem.create({
         data: {
           receiptId: receipt.id,
           rawName: stashItem.rawName,
@@ -257,52 +215,36 @@ export async function commitReceipt(input: CommitInput) {
         },
       });
 
-      // 3c. If food + committed + has an ingredient, write to pantry.
+      // 3c. If food + committed + has an ingredient, create a fresh PantryBatch.
       if (edit.kind !== "food" || !edit.isCommitted || ingredientId == null) continue;
 
-      const incoming: IncomingPantryRow = {
-        ingredientId,
-        quantity: edit.quantity,
-        unit: edit.unit,
-        location: (edit.locationGuess ?? "pantry") as string,
-        expirationDate: edit.expirationDate ? new Date(edit.expirationDate) : null,
-      };
-      const decision = computeMergeDecision(incoming, workingPantry);
+      const ingredient = await tx.ingredient.findUnique({ where: { id: ingredientId } });
+      const expirationDate =
+        edit.expirationDate ? new Date(edit.expirationDate)
+        : ingredient ? suggestExpirationDate({
+            tripDate: new Date(input.tripDate),
+            location: (edit.locationGuess ?? "pantry") as PantryLocation,
+            ingredient: {
+              shelfLifeFridgeDays: ingredient.shelfLifeFridgeDays,
+              shelfLifeFreezerDays: ingredient.shelfLifeFreezerDays,
+              shelfLifePantryDays: ingredient.shelfLifePantryDays,
+            },
+          })
+        : null;
 
-      if (decision.action === "increment") {
-        await tx.pantryItem.update({
-          where: { id: decision.pantryItemId },
-          data: {
-            quantity: decision.newQuantity, // PantryItem.quantity is Float in the schema
-            expirationDate: decision.newExpirationDate,
-          },
-        });
-        // Reflect in the working copy so a later item in this same receipt
-        // merges into the same row (e.g., two banana lines on one receipt).
-        const idx = workingPantry.findIndex((w) => w.id === decision.pantryItemId);
-        if (idx >= 0) {
-          workingPantry[idx].quantity = decision.newQuantity;
-          workingPantry[idx].expirationDate = decision.newExpirationDate;
-        }
-      } else {
-        const created = await tx.pantryItem.create({
-          data: {
-            ingredientId: incoming.ingredientId,
-            quantity: incoming.quantity, // PantryItem.quantity is Float in the schema
-            unit: incoming.unit,
-            location: incoming.location as any,
-            expirationDate: incoming.expirationDate ?? undefined,
-          },
-        });
-        workingPantry.push({
-          id: created.id,
-          ingredientId: incoming.ingredientId,
-          quantity: incoming.quantity,
-          unit: incoming.unit,
-          location: incoming.location,
-          expirationDate: incoming.expirationDate,
-        });
-      }
+      const newBatch = await tx.pantryBatch.create({
+        data: {
+          ingredientId,
+          quantity: edit.quantity,
+          unit: edit.unit,
+          location: (edit.locationGuess ?? "pantry") as any,
+          expirationDate,
+          purchaseDate: new Date(input.tripDate),
+          costAtPurchase: edit.price != null ? new Prisma.Decimal(edit.price) : null,
+          tags: [],
+          receiptItemId: receiptItemRow.id,
+        },
+      });
     }
 
     return receipt;
@@ -340,8 +282,8 @@ export async function getReceiptById(id: number) {
 }
 
 export async function deleteReceipt(id: number) {
-  // Cascade deletes the receipt_items via the FK; PantryItems are untouched
-  // because there's no FK back from PantryItem.
+  // Cascade deletes the receipt_items via the FK; PantryBatches are untouched
+  // because the FK from PantryBatch.receiptItemId uses SET NULL on delete.
   return prisma.receipt.delete({ where: { id } });
 }
 
