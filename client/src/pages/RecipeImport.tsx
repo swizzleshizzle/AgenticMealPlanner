@@ -129,12 +129,19 @@ export default function RecipeImport() {
             Parsed successfully. Review and save to your library.
           </div>
           <div className="bg-surface-1 border border-line rounded-[14px] p-5">
-            <MealForm initialData={parsed} onSubmit={handleSave} submitLabel="Save to Library" />
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <Button variant="ghost" icon={Check} onClick={() => setStage("upload")}>
-              Start over
-            </Button>
+            <MealForm
+              formId="import-form"
+              initialData={parsed}
+              onSubmit={handleSave}
+            />
+            <div className="flex gap-2 mt-4 flex-wrap">
+              <Button type="submit" form="import-form" variant="primary" icon={Check}>
+                Save to Library
+              </Button>
+              <Button variant="ghost" onClick={() => setStage("upload")}>
+                Start over
+              </Button>
+            </div>
           </div>
         </div>
       )}
