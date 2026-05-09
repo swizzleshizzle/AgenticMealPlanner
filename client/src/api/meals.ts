@@ -37,18 +37,50 @@ export interface Meal {
   fatG: number | null;
   fiberG: number | null;
   sodiumMg: number | null;
+  recipeId: number;
+  versionNumber: number;
+  parentMealId: number | null;
+  isDefault: boolean;
+  archivedAt: string | null;
+  variantCount?: number;
   updatedAt?: string;
   ingredients: MealIngredient[];
 }
 
+export interface ArchivedMealsResponse {
+  archivedFamilies: Meal[];
+  archivedVariants: Meal[];
+}
+
 export const getMeals = () => apiFetch<Meal[]>("/meals");
-export const getMeal = (id: number) => apiFetch<Meal>(`/meals/${id}`);
+export const getMeal  = (id: number) => apiFetch<Meal>(`/meals/${id}`);
+
 export const createMeal = (data: any) =>
   apiFetch<Meal>("/meals", { method: "POST", body: JSON.stringify(data) });
 export const updateMeal = (id: number, data: any) =>
   apiFetch<Meal>(`/meals/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteMeal = (id: number) =>
   apiFetch<void>(`/meals/${id}`, { method: "DELETE" });
+
+export const supersedeMeal = (id: number, data: any) =>
+  apiFetch<Meal>(`/meals/${id}/version`, { method: "POST", body: JSON.stringify(data) });
+export const createVariant = (id: number, data: any) =>
+  apiFetch<Meal>(`/meals/${id}/variant`, { method: "POST", body: JSON.stringify(data) });
+
+export const archiveMeal = (id: number) =>
+  apiFetch<Meal>(`/meals/${id}/archive`, { method: "POST" });
+export const archiveFamily = (id: number) =>
+  apiFetch<{ recipeId: number; archivedCount: number }>(
+    `/meals/${id}/archive-family`, { method: "POST" });
+export const unarchiveMeal = (id: number) =>
+  apiFetch<Meal>(`/meals/${id}/unarchive`, { method: "POST" });
+export const setDefaultMeal = (id: number) =>
+  apiFetch<Meal>(`/meals/${id}/set-default`, { method: "POST" });
+
+export const getMealFamily = (id: number) => apiFetch<Meal[]>(`/meals/${id}/family`);
+export const getArchivedMeals = () => apiFetch<ArchivedMealsResponse>(`/meals/archived`);
+
+export const getIngredients = () => apiFetch<Ingredient[]>("/ingredients");
 
 export interface ImportRecipeResult {
   parsed: any;
