@@ -11,11 +11,13 @@ import Pantry from "./pages/Pantry";
 import ShoppingList from "./pages/ShoppingList";
 import Chat from "./pages/Chat";
 import { ToastProvider } from "./components/ui/ToastProvider";
+import CookConfirmProvider from "./components/cookConfirm/CookConfirmProvider";
 
 export default function App() {
   return (
     <BrowserRouter>
       <ToastProvider>
+        <CookConfirmProvider>
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
@@ -32,6 +34,7 @@ export default function App() {
             <Route path="/chat" element={<Chat />} />
           </Route>
         </Routes>
+        </CookConfirmProvider>
       </ToastProvider>
     </BrowserRouter>
   );
