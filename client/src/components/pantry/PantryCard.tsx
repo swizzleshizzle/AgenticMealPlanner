@@ -1,5 +1,5 @@
 // client/src/components/pantry/PantryCard.tsx
-import { Refrigerator, Snowflake, BookMarked, Package, AlertTriangle } from "lucide-react";
+import { Refrigerator, Snowflake, BookMarked, Package } from "lucide-react";
 import type { PantryCard as PantryCardData } from "../../api/pantry";
 import Pill from "../ui/Pill";
 
@@ -37,7 +37,6 @@ function dominantLocation(card: PantryCardData): "fridge" | "freezer" | "pantry"
 export default function PantryCard({ card, onOpen }: Props) {
   const loc = dominantLocation(card);
   const Icon = loc === "mixed" ? Package : LOC_ICON[loc];
-  const total = card.canonicalTotal;
   const days = card.nextExpirationDays;
 
   return (
@@ -57,11 +56,7 @@ export default function PantryCard({ card, onOpen }: Props) {
       </div>
 
       <div className="flex items-end justify-between gap-2 mt-1">
-        <div className="text-[15px] tabular-nums text-ink-1">
-          {total
-            ? `${card.partialTotal ? "~" : ""}${formatQty(total.qty)} ${total.unit}`
-            : <span className="text-ink-3">—</span>}
-        </div>
+        <div className="text-[15px] tabular-nums text-ink-1">{formatTotals(card.totalsByUnit)}</div>
         <div className="flex gap-1.5">
           {card.isLowStock && <Pill tone="warn" size="sm">Low</Pill>}
           {days != null && (
@@ -72,13 +67,6 @@ export default function PantryCard({ card, onOpen }: Props) {
           {loc === "mixed" && <Pill tone="ghost" size="sm">Mixed</Pill>}
         </div>
       </div>
-
-      {card.partialTotal && (
-        <div className="flex items-center gap-1 text-[10.5px] text-ink-3">
-          <AlertTriangle size={11} />
-          <span>Some batches couldn't be summed (missing density)</span>
-        </div>
-      )}
     </button>
   );
 }
@@ -86,4 +74,9 @@ export default function PantryCard({ card, onOpen }: Props) {
 function formatQty(q: number): string {
   if (Math.abs(q - Math.round(q)) < 1e-6) return String(Math.round(q));
   return q.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function formatTotals(totals: Array<{ unit: string; qty: number }>) {
+  if (totals.length === 0) return <span className="text-ink-3">—</span>;
+  return totals.map((t) => `${formatQty(t.qty)} ${t.unit}`).join(" · ");
 }
