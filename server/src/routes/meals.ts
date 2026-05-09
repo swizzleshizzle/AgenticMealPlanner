@@ -117,4 +117,9 @@ router.post("/import", upload.single("file"), async (req, res) => {
   }
 });
 
+router.get("/:id/family", async (req, res) => {
+  const family = await mealService.getFamily(Number(req.params.id));
+  res.json(family);
+});
+
 export default router;
