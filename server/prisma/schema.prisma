@@ -98,12 +98,23 @@ model Meal {
   imagePath   String?  @map("image_path")
   imageSource String?  @map("image_source")
 
+  recipeId      Int       @map("recipe_id")
+  versionNumber Int       @default(1) @map("version_number")
+  parentMealId  Int?      @map("parent_meal_id")
+  isDefault     Boolean   @default(true) @map("is_default")
+  archivedAt    DateTime? @map("archived_at")
+
+  parent     Meal?  @relation("MealSupersede", fields: [parentMealId], references: [id])
+  supersedes Meal[] @relation("MealSupersede")
+
   createdAt   DateTime   @default(now()) @map("created_at")
   updatedAt   DateTime   @updatedAt @map("updated_at")
 
   ingredients  MealIngredient[]
   plannedMeals PlannedMeal[]
 
+  @@index([recipeId])
+  @@index([recipeId, archivedAt, isDefault])
   @@map("meals")
 }
 

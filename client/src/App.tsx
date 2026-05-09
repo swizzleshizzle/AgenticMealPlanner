@@ -4,6 +4,8 @@ import Dashboard from "./pages/Dashboard";
 import Recipes from "./pages/Recipes";
 import RecipeDetail from "./pages/RecipeDetail";
 import RecipeImport from "./pages/RecipeImport";
+import RecipeArchive from "./pages/RecipeArchive";
+import RecipeEditor from "./pages/RecipeEditor";
 import Planner from "./pages/Planner";
 import Pantry from "./pages/Pantry";
 import ShoppingList from "./pages/ShoppingList";
@@ -18,8 +20,12 @@ export default function App() {
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/recipes" element={<Recipes />} />
-            <Route path="/recipes/:id" element={<RecipeDetail />} />
-            <Route path="/recipes/import" element={<RecipeImport />} />
+            <Route path="/recipes/new"            element={<RecipeEditor mode="new" />} />
+            <Route path="/recipes/import"         element={<RecipeImport />} />
+            <Route path="/recipes/archived"       element={<RecipeArchive />} />
+            <Route path="/recipes/:id/edit"       element={<RecipeEditor mode="edit" />} />
+            <Route path="/recipes/:id/variant"    element={<RecipeEditor mode="variant" />} />
+            <Route path="/recipes/:id"            element={<RecipeDetail />} />
             <Route path="/planner" element={<Planner />} />
             <Route path="/pantry" element={<Pantry />} />
             <Route path="/shopping" element={<ShoppingList />} />

@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { aggregateCards } from "./pantryAggregation.js";
+import { resolvePlannedMealForShopping, type VersionRow } from "./mealVersioning.js";
 
 const prisma = new PrismaClient();
 
@@ -63,43 +64,84 @@ export function aggregateShoppingItems(input: AggregateInput): AggregateOutput[]
 export async function generateShoppingList(planId: number) {
   await prisma.shoppingItem.deleteMany({ where: { planId } });
 
+  // Query ALL non-leftovers PlannedMeals regardless of status — status
+  // filtering happens after version resolution so the resolver sees every row.
   const plannedMeals = await prisma.plannedMeal.findMany({
-    where: {
-      planId,
-      status: { in: ["planned", "cooked"] },
-      cookStyle: { not: "leftovers" },
-    },
-    include: { meal: { include: { ingredients: true } } },
+    where: { planId, cookStyle: { not: "leftovers" } },
+    select: { id: true, mealId: true, status: true, cookStyle: true, servings: true },
   });
+
+  // Pull every meal that's even potentially relevant to this plan: each
+  // PlannedMeal's row plus every other row sharing its recipeId so the
+  // resolver can pick "current default."
+  const referencedIds = [...new Set(plannedMeals.map((pm) => pm.mealId))];
+  const referencedMeals = await prisma.meal.findMany({
+    where: { id: { in: referencedIds } },
+    select: { id: true, recipeId: true },
+  });
+  const recipeIds = [...new Set(referencedMeals.map((m) => m.recipeId))];
+
+  const allFamilyMeals = await prisma.meal.findMany({
+    where: { recipeId: { in: recipeIds } },
+    include: { ingredients: true },
+  });
+
+  const versionRows: (VersionRow & {
+    servings: number;
+    ingredients: { ingredientId: number; quantity: number; unit: string }[];
+  })[] = allFamilyMeals.map((m) => ({
+    id: m.id,
+    recipeId: m.recipeId,
+    isDefault: m.isDefault,
+    archivedAt: m.archivedAt,
+    servings: m.servings,
+    ingredients: m.ingredients.map((mi) => ({
+      ingredientId: mi.ingredientId,
+      quantity: mi.quantity,
+      unit: mi.unit,
+    })),
+  }));
+
+  // Resolve each PlannedMeal to the right version per the spec:
+  // - planned  → floats to the family's current active default
+  // - cooked / skipped / swapped → freeze to the referenced row
+  // Carry status through so we can filter after flatMap (avoids index misalignment).
+  const aggregateInput = plannedMeals.flatMap((pm) => {
+    const resolved = resolvePlannedMealForShopping(
+      { mealId: pm.mealId, status: pm.status as "planned" | "cooked" | "skipped" | "swapped" },
+      versionRows,
+    );
+    if (!resolved) return [];
+    const row = versionRows.find((r) => r.id === resolved.id)!;
+    return [{
+      status: pm.status,
+      cookStyle: pm.cookStyle as "cook_fresh" | "batch_prep" | "leftovers",
+      servings: pm.servings,
+      meal: { servings: row.servings, ingredients: row.ingredients },
+    }];
+  });
+
+  // Status filter mirrors prior behavior: planned + cooked contribute to the
+  // shopping list; skipped + swapped do not.
+  // Status is stripped from the shape before passing to aggregateShoppingItems.
+  const statusFilteredInput = aggregateInput
+    .filter((entry) => entry.status === "planned" || entry.status === "cooked")
+    .map(({ status: _omit, ...rest }) => rest);
 
   const pantryItems = await prisma.pantryBatch.findMany({ where: { consumedAt: null } });
 
   const aggregated = aggregateShoppingItems({
-    plannedMeals: plannedMeals.map((pm) => ({
-      cookStyle: pm.cookStyle,
-      servings: pm.servings,
-      meal: {
-        servings: pm.meal.servings,
-        ingredients: pm.meal.ingredients.map((mi) => ({
-          ingredientId: mi.ingredientId,
-          quantity: mi.quantity,
-          unit: mi.unit,
-        })),
-      },
-    })),
-    pantryItems: pantryItems.map((p) => ({
-      ingredientId: p.ingredientId,
-      quantity: p.quantity,
-    })),
+    plannedMeals: statusFilteredInput,
+    pantryItems: pantryItems.map((p) => ({ ingredientId: p.ingredientId, quantity: p.quantity })),
   });
 
   await prisma.shoppingItem.createMany({
     data: aggregated.map((a) => ({
       planId,
-      ingredientId: a.ingredientId,
+      ingredientId:   a.ingredientId,
       quantityNeeded: a.quantityNeeded,
       quantityOnHand: a.quantityOnHand,
-      quantityToBuy: a.quantityToBuy,
+      quantityToBuy:  a.quantityToBuy,
     })),
   });
 

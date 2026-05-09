@@ -24,33 +24,41 @@ async function importOne(filePath: string) {
     ingredientMap.set(ing.name, ingredient.id);
   }
 
-  const meal = await prisma.meal.create({
-    data: {
-      name: parsed.name,
-      description: parsed.description,
-      source: "hello_fresh",
-      canBatch: false,
-      canFresh: true,
-      servings: parsed.servings,
-      prepTime: parsed.prepTime ?? undefined,
-      cookTime: parsed.cookTime ?? undefined,
-      tags: parsed.tags,
-      instructions: JSON.stringify(parsed.instructions),
-      calories: parsed.calories ?? undefined,
-      proteinG: parsed.proteinG ?? undefined,
-      carbsG: parsed.carbsG ?? undefined,
-      fatG: parsed.fatG ?? undefined,
-      fiberG: parsed.fiberG ?? undefined,
-      sodiumMg: parsed.sodiumMg ?? undefined,
-      ingredients: {
-        create: parsed.ingredients.map((ing) => ({
-          ingredientId: ingredientMap.get(ing.name)!,
-          quantity: ing.quantity,
-          unit: ing.unit,
-          preparation: ing.preparation,
-        })),
+  const meal = await prisma.$transaction(async (tx) => {
+    const created = await tx.meal.create({
+      data: {
+        name: parsed.name,
+        description: parsed.description,
+        source: "hello_fresh",
+        canBatch: false,
+        canFresh: true,
+        servings: parsed.servings,
+        prepTime: parsed.prepTime ?? undefined,
+        cookTime: parsed.cookTime ?? undefined,
+        tags: parsed.tags,
+        instructions: JSON.stringify(parsed.instructions),
+        recipeId: 0, // overwritten below; non-null required.
+        calories: parsed.calories ?? undefined,
+        proteinG: parsed.proteinG ?? undefined,
+        carbsG: parsed.carbsG ?? undefined,
+        fatG: parsed.fatG ?? undefined,
+        fiberG: parsed.fiberG ?? undefined,
+        sodiumMg: parsed.sodiumMg ?? undefined,
+        ingredients: {
+          create: parsed.ingredients.map((ing) => ({
+            ingredientId: ingredientMap.get(ing.name)!,
+            quantity: ing.quantity,
+            unit: ing.unit,
+            preparation: ing.preparation,
+          })),
+        },
       },
-    },
+    });
+
+    return tx.meal.update({
+      where: { id: created.id },
+      data: { recipeId: created.id },
+    });
   });
 
   return meal;

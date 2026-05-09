@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Search, Flame, Leaf, Upload } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Search, Flame, Leaf, Upload, Plus, Archive } from "lucide-react";
 import { getMeals, type Meal } from "../api/meals";
 import MealCard from "../components/MealCard";
 import Button from "../components/ui/Button";
@@ -39,14 +39,23 @@ export default function Recipes() {
     <div className="flex flex-col gap-7">
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
-          <div className="text-[12px] uppercase tracking-[0.1em] text-ink-3 mb-1.5">
+          <div className="flex items-center gap-2 text-[12px] uppercase tracking-[0.1em] text-ink-3 mb-1.5">
             Library · {meals.length} recipe{meals.length === 1 ? "" : "s"}
+            <span aria-hidden>·</span>
+            <Link to="/recipes/archived" className="inline-flex items-center gap-1 hover:text-ink-1 normal-case tracking-normal">
+              <Archive size={12} /> Archive
+            </Link>
           </div>
           <h1 className="text-[26px] sm:text-[30px] font-semibold -tracking-[0.02em] text-ink-1">Recipes</h1>
         </div>
-        <Button variant="primary" icon={Upload} onClick={() => navigate("/recipes/import")}>
-          Import recipe
-        </Button>
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="ghost" icon={Plus} onClick={() => navigate("/recipes/new")}>
+            New recipe
+          </Button>
+          <Button variant="primary" icon={Upload} onClick={() => navigate("/recipes/import")}>
+            Import recipe
+          </Button>
+        </div>
       </div>
 
       <div className="flex gap-2.5 items-center flex-wrap">

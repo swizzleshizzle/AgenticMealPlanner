@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Clock, Users, Flame, Leaf } from "lucide-react";
+import { Clock, Users, Flame, Leaf, GitBranch } from "lucide-react";
 import type { Meal } from "../api/meals";
 import Pill from "./ui/Pill";
 import PhotoTile from "./ui/PhotoTile";
@@ -41,6 +41,12 @@ export default function MealCard({ meal, photos = true, compact = false, to }: P
             <Pill tone="fresh" size="sm">
               <Leaf size={11} />
               Cook Fresh
+            </Pill>
+          )}
+          {(meal.variantCount ?? 1) > 1 && (
+            <Pill tone="ghost" size="sm">
+              <GitBranch size={11} />
+              {meal.variantCount} variants
             </Pill>
           )}
           {!photos && meal.tags.slice(0, 1).map((t) => (

@@ -62,6 +62,7 @@ router.post("/:id/generate", async (req, res) => {
   }
 
   const allMeals = await prisma.meal.findMany({
+    where: { isDefault: true, archivedAt: null },
     select: { id: true, name: true, canBatch: true, canFresh: true, tags: true, servings: true, calories: true },
   });
 
