@@ -439,6 +439,20 @@ export async function archiveMeal(id: number) {
   });
 }
 
+// Archives every active row in the family containing the given meal id.
+// `id` may be any row in the family; the server resolves to its recipe_id.
+export async function archiveFamily(anyMemberId: number) {
+  const member = await prisma.meal.findUniqueOrThrow({
+    where: { id: anyMemberId },
+    select: { recipeId: true },
+  });
+  const result = await prisma.meal.updateMany({
+    where: { recipeId: member.recipeId, archivedAt: null },
+    data: { archivedAt: new Date(), isDefault: false },
+  });
+  return { recipeId: member.recipeId, archivedCount: result.count };
+}
+
 // Returns the active variants of the family containing the given meal id,
 // ordered with the default first then by name. The argument may be any row
 // in the family; the server resolves to its recipe_id.
