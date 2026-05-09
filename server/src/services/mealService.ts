@@ -3,6 +3,7 @@ import { copyFile, unlink, stat } from "fs/promises";
 import path from "path";
 import { ensureMealDir, mealThumbPath, mealPdfPath, relStoragePath } from "./mediaStorage.js";
 import { runThumbnailJob } from "./pdfExtraction.js";
+import { pickNextDefaultAfterArchive } from "./mealVersioning.js";
 
 const prisma = new PrismaClient();
 
@@ -402,6 +403,39 @@ export async function createVariant(sourceId: number, data: Partial<CreateMealIn
     where: { id: created.id },
     data: assetUpdate,
     include: mealWithIngredients,
+  });
+}
+
+export async function archiveMeal(id: number) {
+  return prisma.$transaction(async (tx) => {
+    const target = await tx.meal.findUniqueOrThrow({
+      where: { id },
+      select: { id: true, recipeId: true, isDefault: true },
+    });
+
+    const family = await tx.meal.findMany({
+      where: { recipeId: target.recipeId },
+      select: { id: true, isDefault: true, archivedAt: true, updatedAt: true },
+    });
+
+    const promoteTo = pickNextDefaultAfterArchive(family, id);
+
+    await tx.meal.update({
+      where: { id },
+      data: { isDefault: false, archivedAt: new Date() },
+    });
+
+    if (promoteTo) {
+      await tx.meal.update({
+        where: { id: promoteTo.id },
+        data: { isDefault: true },
+      });
+    }
+
+    return tx.meal.findUniqueOrThrow({
+      where: { id },
+      include: mealWithIngredients,
+    });
   });
 }
 
