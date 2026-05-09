@@ -482,6 +482,44 @@ export async function archiveFamily(anyMemberId: number) {
   return { recipeId: member.recipeId, archivedCount: result.count };
 }
 
+// Returns archived rows grouped into "archived families" (families where
+// every row is archived) and "archived variants" (archived rows in
+// families that still have ≥1 active row).
+export async function getArchivedMeals() {
+  const archived = await prisma.meal.findMany({
+    where: { archivedAt: { not: null } },
+    include: mealWithIngredients,
+    orderBy: { updatedAt: "desc" },
+  });
+  if (archived.length === 0) return { archivedFamilies: [], archivedVariants: [] };
+
+  const recipeIds = [...new Set(archived.map((m) => m.recipeId))];
+  const activeCounts = await prisma.meal.groupBy({
+    by: ["recipeId"],
+    where: { recipeId: { in: recipeIds }, archivedAt: null },
+    _count: { _all: true },
+  });
+  const activeByRecipe = new Map(activeCounts.map((g) => [g.recipeId, g._count._all]));
+
+  const archivedFamilies: typeof archived = [];
+  const archivedVariants: typeof archived = [];
+
+  // For families with no active rows, surface the most recently archived row
+  // as the "family card" representative.
+  const seenFamilies = new Set<number>();
+  for (const m of archived) {
+    const familyHasActive = (activeByRecipe.get(m.recipeId) ?? 0) > 0;
+    if (familyHasActive) {
+      archivedVariants.push(m);
+    } else if (!seenFamilies.has(m.recipeId)) {
+      archivedFamilies.push(m);
+      seenFamilies.add(m.recipeId);
+    }
+  }
+
+  return { archivedFamilies, archivedVariants };
+}
+
 // Returns the active variants of the family containing the given meal id,
 // ordered with the default first then by name. The argument may be any row
 // in the family; the server resolves to its recipe_id.

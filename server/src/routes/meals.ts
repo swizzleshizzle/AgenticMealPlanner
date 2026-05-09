@@ -14,6 +14,10 @@ router.get("/", async (_req, res) => {
   res.json(meals);
 });
 
+router.get("/archived", async (_req, res) => {
+  res.json(await mealService.getArchivedMeals());
+});
+
 router.get("/:id", async (req, res) => {
   const meal = await mealService.getMealById(Number(req.params.id));
   if (!meal) {
