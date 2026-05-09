@@ -124,75 +124,143 @@ export function selectBatchesToDrain(input: {
   return { consumed, shortfall: remaining, shortfallUnit: input.neededUnit };
 }
 
-export async function deductIngredientsForMeal(mealId: number, servingMultiplier: number) {
-  return prisma.$transaction(async (tx) => {
+export interface DeductOverride {
+  ingredientId: number;
+  quantity: number;
+  unit: string;
+}
+
+export interface DeductShortfall {
+  ingredientId: number;
+  ingredientName: string;
+  requestedQuantity: number;
+  requestedUnit: string;
+  availableQuantity: number;
+  reason: "insufficient" | "no_density" | "no_pantry";
+}
+
+export interface DeductResult {
+  shortfalls: DeductShortfall[];
+}
+
+type Tx = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
+
+export async function deductIngredientsForMeal(
+  mealId: number,
+  servingMultiplier: number,
+  overrides?: DeductOverride[],
+  tx?: Tx,
+): Promise<DeductResult> {
+  if (tx) {
+    return runDeduction(tx, mealId, servingMultiplier, overrides);
+  }
+  return prisma.$transaction((innerTx) =>
+    runDeduction(innerTx, mealId, servingMultiplier, overrides),
+  );
+}
+
+async function runDeduction(
+  tx: Tx,
+  mealId: number,
+  servingMultiplier: number,
+  overrides: DeductOverride[] | undefined,
+): Promise<DeductResult> {
+  let lines: Array<{ ingredientId: number; quantity: number; unit: string }>;
+  if (overrides !== undefined) {
+    lines = overrides.map((o) => ({
+      ingredientId: o.ingredientId,
+      quantity: o.quantity,
+      unit: o.unit,
+    }));
+  } else {
     const mealIngredients = await (tx as any).mealIngredient.findMany({
       where: { mealId },
-      include: { ingredient: true },
+    });
+    lines = mealIngredients.map((mi: any) => ({
+      ingredientId: mi.ingredientId,
+      quantity: mi.quantity * servingMultiplier,
+      unit: mi.unit,
+    }));
+  }
+
+  const shortfalls: DeductShortfall[] = [];
+
+  for (const line of lines) {
+    const ingredient = await (tx as any).ingredient.findUnique({
+      where: { id: line.ingredientId },
+    });
+    if (!ingredient) continue;
+
+    const batchRows = await (tx as any).pantryBatch.findMany({
+      where: { ingredientId: line.ingredientId, consumedAt: null },
     });
 
-    const shortfalls: Array<{
-      ingredientId: number;
-      ingredientName: string;
-      missingQty: number;
-      unit: string;
-      missingField?: "densityGPerMl" | "gramsPerCount";
-    }> = [];
-
-    for (const mi of mealIngredients) {
-      const needed = mi.quantity * servingMultiplier;
-      const ingredient = mi.ingredient;
-      const batchRows = await (tx as any).pantryBatch.findMany({
-        where: { ingredientId: mi.ingredientId, consumedAt: null },
+    if (batchRows.length === 0) {
+      shortfalls.push({
+        ingredientId: line.ingredientId,
+        ingredientName: ingredient.name,
+        requestedQuantity: line.quantity,
+        requestedUnit: line.unit,
+        availableQuantity: 0,
+        reason: "no_pantry",
       });
+      continue;
+    }
 
-      let plan: DrainPlan;
-      try {
-        plan = selectBatchesToDrain({
-          needed,
-          neededUnit: mi.unit,
-          ingredient,
-          batches: batchRows.map((b: any) => ({
-            id: b.id,
-            quantity: b.quantity,
-            unit: b.unit,
-            expirationDate: b.expirationDate,
-            tags: b.tags,
-          })),
-        });
-      } catch (e) {
-        if (e instanceof UnitConversionError) {
-          // Cannot deduct — record as shortfall and move on.
-          shortfalls.push({
-            ingredientId: mi.ingredientId,
-            ingredientName: ingredient.name,
-            missingQty: needed,
-            unit: mi.unit,
-            missingField: e.missing === "densityGPerMl" || e.missing === "gramsPerCount" ? e.missing : undefined,
-          });
-          continue;
-        }
-        throw e;
-      }
-
-      for (const c of plan.consumed) {
-        if (c.partial) {
-          await (tx as any).pantryBatch.update({ where: { id: c.batchId }, data: { quantity: c.newQuantity } });
-        } else {
-          await (tx as any).pantryBatch.update({ where: { id: c.batchId }, data: { quantity: 0, consumedAt: new Date() } });
-        }
-      }
-
-      if (plan.shortfall > 0) {
+    let plan;
+    try {
+      plan = selectBatchesToDrain({
+        needed: line.quantity,
+        neededUnit: line.unit,
+        ingredient,
+        batches: batchRows.map((b: any) => ({
+          id: b.id,
+          quantity: b.quantity,
+          unit: b.unit,
+          expirationDate: b.expirationDate,
+          tags: b.tags,
+        })),
+      });
+    } catch (e) {
+      if (e instanceof UnitConversionError) {
         shortfalls.push({
-          ingredientId: mi.ingredientId,
+          ingredientId: line.ingredientId,
           ingredientName: ingredient.name,
-          missingQty: plan.shortfall,
-          unit: plan.shortfallUnit,
+          requestedQuantity: line.quantity,
+          requestedUnit: line.unit,
+          availableQuantity: 0,
+          reason: "no_density",
+        });
+        continue;
+      }
+      throw e;
+    }
+
+    for (const c of plan.consumed) {
+      if (c.partial) {
+        await (tx as any).pantryBatch.update({
+          where: { id: c.batchId },
+          data: { quantity: c.newQuantity },
+        });
+      } else {
+        await (tx as any).pantryBatch.update({
+          where: { id: c.batchId },
+          data: { quantity: 0, consumedAt: new Date() },
         });
       }
     }
 
-    return { shortfalls };
-  });
+    if (plan.shortfall > 0) {
+      shortfalls.push({
+        ingredientId: line.ingredientId,
+        ingredientName: ingredient.name,
+        requestedQuantity: line.quantity,
+        requestedUnit: line.unit,
+        availableQuantity: line.quantity - plan.shortfall,
+        reason: "insufficient",
+      });
+    }
+  }
+
+  return { shortfalls };
 }

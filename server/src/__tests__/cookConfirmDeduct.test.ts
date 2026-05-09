@@ -165,18 +165,22 @@ describe("deductIngredientsForMeal — recipe-derived path (overrides omitted)",
     const chicken = await prisma.ingredient.create({
       data: { name: "chicken thighs", defaultUnit: "g" },
     });
-    const meal = await prisma.meal.create({
-      data: {
-        name: "Test stir fry",
-        servings: 4,
-        ingredients: { create: [{ ingredientId: chicken.id, quantity: 400, unit: "g" }] },
-      },
+    // Use raw SQL because the test DB may have a recipe_id NOT NULL column from
+    // the recipe-versioning migration that isn't reflected in this branch's schema.
+    const mealRows = await prisma.$queryRaw<Array<{ id: number }>>`
+      INSERT INTO meals (name, servings, instructions, recipe_id, version_number, is_default, updated_at)
+      VALUES ('Test stir fry', 4, '[]'::jsonb, 1, 1, true, now())
+      RETURNING id
+    `;
+    const mealId = mealRows[0].id;
+    await prisma.mealIngredient.create({
+      data: { mealId, ingredientId: chicken.id, quantity: 400, unit: "g" },
     });
     await prisma.pantryBatch.create({
       data: { ingredientId: chicken.id, quantity: 500, unit: "g", location: "pantry" },
     });
 
-    const result = await deductIngredientsForMeal(meal.id, 0.5);
+    const result = await deductIngredientsForMeal(mealId, 0.5);
 
     expect(result.shortfalls).toEqual([]);
     const remaining = await prisma.pantryBatch.findFirst({
