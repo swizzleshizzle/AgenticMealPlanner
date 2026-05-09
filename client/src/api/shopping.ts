@@ -10,9 +10,20 @@ export interface ShoppingItem {
   ingredient: Ingredient;
 }
 
+export interface LowStockSuggestion {
+  ingredientId: number;
+  name: string;
+  currentQty: number;
+  currentUnit: string;
+  threshold: number | null;
+  thresholdUnit: string | null;
+}
+
 export const getShoppingList = (planId: number) =>
   apiFetch<ShoppingItem[]>(`/shopping/${planId}`);
 export const generateShoppingList = (planId: number) =>
   apiFetch<ShoppingItem[]>(`/shopping/generate/${planId}`, { method: "POST" });
 export const toggleItem = (id: number, checked: boolean) =>
   apiFetch<ShoppingItem>(`/shopping/item/${id}`, { method: "PUT", body: JSON.stringify({ checked }) });
+export const getLowStockSuggestions = () =>
+  apiFetch<LowStockSuggestion[]>("/shopping/low-stock");

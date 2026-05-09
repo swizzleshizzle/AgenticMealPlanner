@@ -65,7 +65,8 @@ router.post("/:id/generate", async (req, res) => {
     select: { id: true, name: true, canBatch: true, canFresh: true, tags: true, servings: true, calories: true },
   });
 
-  const pantryItems = await prisma.pantryItem.findMany({
+  const pantryItems = await prisma.pantryBatch.findMany({
+    where: { consumedAt: null },
     include: { ingredient: true },
   });
   const pantry = pantryItems.map((p) => ({
