@@ -42,6 +42,34 @@ manually with a full builder.
   Service-layer transactions enforce it; we do not add partial-unique
   indexes or check constraints in this branch.
 
+## Cross-plan: cooked-meal validation modal
+
+A separate, planned feature ("cooked-meal validation modal") opens a form
+when the user marks a planned meal cooked, letting them edit per-ingredient
+quantities, skip ingredients, and add ad-hoc ingredients (the canonical
+example: skipping recipe's soy + honey + vinegar + sesame oil because the
+user actually used 2 tbsp of pre-made hoisin from a jar). For its v1, those
+edits are **per-cook only** and only affect the pantry deduction — the
+recipe row is not touched.
+
+When *that* plan ships, this plan's "Save as new version" / "Save as
+variant" actions should be reachable from the cook modal, so the user
+can promote a recurring ad-hoc substitution into a permanent recipe
+change without opening the editor separately. The integration point:
+
+- The cook modal already has the user's edited ingredient list in hand.
+- Add an optional secondary action like "Save these changes to the recipe
+  too" with a sub-choice (new version vs. variant), routing into
+  `mealService.supersede` / `mealService.createVariant` from this plan.
+
+If this plan ships first, leave the modal hooks unwired and add the
+"Save these changes to the recipe too" affordance to the cook-modal plan
+when it's executed. If the cook-modal plan ships first, this plan's
+implementer should remember to add the cook-modal entry points.
+
+The user has explicitly deferred the substitution-memory affordance until
+this versioning plan is built — see `memory/project_cooked_meal_modal.md`.
+
 ## Decisions made during brainstorming
 
 These are recorded so future readers don't relitigate them.

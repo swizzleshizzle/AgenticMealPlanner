@@ -10,6 +10,15 @@
 
 **Reference spec:** `docs/superpowers/specs/2026-05-05-recipe-versioning-design.md`
 
+> **Cross-plan reminder:** A separate "cooked-meal validation modal" plan
+> exists/will exist. When that modal lets the user override ingredients
+> at cook time, it should be able to optionally call into this plan's
+> `supersedeMeal` / `createVariant` actions to persist those changes as
+> a new version or variant. See the spec's "Cross-plan: cooked-meal
+> validation modal" section for the integration shape. If the cook-modal
+> ships first, this plan's implementer adds the wiring; if this plan
+> ships first, leave room for the cook modal to call in.
+
 ---
 
 ## File map
