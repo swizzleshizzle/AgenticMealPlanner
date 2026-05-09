@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Sparkles,
@@ -18,7 +18,6 @@ import {
 } from "lucide-react";
 import {
   getPlans,
-  updatePlannedMeal,
   type WeeklyPlan,
   type PlannedMeal,
 } from "../api/plans";
@@ -29,6 +28,7 @@ import PhotoTile from "../components/ui/PhotoTile";
 import SectionHead from "../components/ui/SectionHead";
 import Button from "../components/ui/Button";
 import { toneForMeal } from "../theme/photoTone";
+import { useCookConfirm } from "../components/cookConfirm/CookConfirmProvider";
 
 const DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
 const DAY_LONG: Record<string, string> = {
@@ -80,8 +80,9 @@ export default function Dashboard() {
   const [shopping, setShopping] = useState<ShoppingItem[]>([]);
   const [now] = useState(() => new Date());
   const navigate = useNavigate();
+  const { openForMeal } = useCookConfirm();
 
-  const load = () => {
+  const load = useCallback(() => {
     getPlans().then((plans) => {
       // Prefer the plan covering today; otherwise surface the soonest upcoming
       // so the dashboard is useful in the gap between active plans.
@@ -93,9 +94,17 @@ export default function Dashboard() {
       if (next) getShoppingList(next.id).then(setShopping).catch(() => setShopping([]));
     }).catch(() => setPlan(null));
     getPantry().then(setPantry).catch(() => setPantry([]));
-  };
+  }, [setPlan, setShopping, setPantry]);
 
-  useEffect(load, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    const onDone = () => { load(); };
+    window.addEventListener("cookconfirm:done", onDone);
+    return () => window.removeEventListener("cookconfirm:done", onDone);
+  }, [load]);
 
   const today = todayKey();
   const planIsCurrent = plan ? planCoversToday(plan) : false;
@@ -146,10 +155,9 @@ export default function Dashboard() {
 
   const dateLabel = now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
 
-  const handleCooked = async (pm: PlannedMeal) => {
+  const handleCooked = (pm: PlannedMeal) => {
     if (!plan) return;
-    await updatePlannedMeal(plan.id, pm.id, { status: "cooked" });
-    load();
+    openForMeal(plan.id, pm.id);
   };
 
   return (
