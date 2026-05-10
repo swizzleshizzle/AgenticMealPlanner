@@ -38,6 +38,7 @@ import Pill from "../components/ui/Pill";
 import Button from "../components/ui/Button";
 import PhotoTile from "../components/ui/PhotoTile";
 import { toneForMeal } from "../theme/photoTone";
+import { useCookConfirm } from "../components/cookConfirm/CookConfirmProvider";
 
 const DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
 const DAY_LABELS: Record<string, string> = {
@@ -76,6 +77,7 @@ export default function Planner() {
   const [syncing, setSyncing] = useState(false);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { openForMeal } = useCookConfirm();
 
   // The viewed week is the URL's source of truth. parseWeekParam normalizes
   // anything weird (mid-week dates, garbage strings, missing param) to the
@@ -92,9 +94,14 @@ export default function Planner() {
     }
   }, [rawWeekParam, viewedWeek, setSearchParams]);
 
+  const loadPlans = () => getPlans().then(setPlans).catch(() => setPlans([]));
+
   useEffect(() => {
-    getPlans().then(setPlans).catch(() => setPlans([]));
+    loadPlans();
     getMeals().then(setMeals).catch(() => setMeals([]));
+    const onDone = () => { loadPlans(); };
+    window.addEventListener("cookconfirm:done", onDone);
+    return () => window.removeEventListener("cookconfirm:done", onDone);
   }, []);
 
   const viewedPlan = useMemo(
@@ -465,6 +472,12 @@ export default function Planner() {
           onRemove={() => removePm(editing)}
           onOpenRecipe={() => navigate(`/recipes/${editing.meal.id}`)}
           onClose={() => setEditing(null)}
+          onCookedRequested={() => {
+            if (!effectiveViewedPlan) return;
+            const pm = editing;
+            setEditing(null);
+            openForMeal(effectiveViewedPlan.id, pm.id);
+          }}
         />
       )}
     </div>
@@ -608,7 +621,7 @@ function MealPickerModal({
 }
 
 function PlannedMealEditModal({
-  pm, onChange, onSwap, onRemove, onOpenRecipe, onClose,
+  pm, onChange, onSwap, onRemove, onOpenRecipe, onClose, onCookedRequested,
 }: {
   pm: PlannedMeal;
   onChange: (patch: Partial<PlannedMeal>) => Promise<void>;
@@ -616,6 +629,7 @@ function PlannedMealEditModal({
   onRemove: () => Promise<void>;
   onOpenRecipe: () => void;
   onClose: () => void;
+  onCookedRequested: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
@@ -694,7 +708,13 @@ function PlannedMealEditModal({
                   <button
                     key={s.value}
                     disabled={busy || active}
-                    onClick={() => guarded(() => onChange({ status: s.value }))}
+                    onClick={() => {
+                      if (s.value === "cooked") {
+                        onCookedRequested();
+                      } else {
+                        guarded(() => onChange({ status: s.value }));
+                      }
+                    }}
                     className={`px-3 py-1.5 rounded-[8px] text-[12.5px] border transition ${
                       active
                         ? "bg-accent text-accent-on border-accent"
