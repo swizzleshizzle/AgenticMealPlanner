@@ -5,6 +5,27 @@ import * as plannerService from "./plannerService.js";
 
 const prisma = new PrismaClient();
 
+function localYmd(d: Date): string {
+  // Format a Date in the server's local timezone — for "now", not for DB dates.
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function dbDateYmd(d: Date): string {
+  // Prisma @db.Date columns come back as midnight-UTC; the local-timezone
+  // accessors would shift the day west of UTC. Slice the ISO string instead.
+  return d.toISOString().slice(0, 10);
+}
+
+function thisWeekMonday(now: Date): string {
+  const dayIndex = (now.getDay() + 6) % 7;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - dayIndex);
+  return localYmd(monday);
+}
+
 export async function handleChatMessage(message: string): Promise<ChatResponse & { applied: boolean[] }> {
   const meals = await prisma.meal.findMany({
     where: { isDefault: true, archivedAt: null },
@@ -31,6 +52,7 @@ export async function handleChatMessage(message: string): Promise<ChatResponse &
   const currentPlan = activePlan
     ? {
         id: activePlan.id,
+        weekStartDate: dbDateYmd(activePlan.weekStartDate),
         meals: activePlan.plannedMeals.map((pm) => ({
           id: pm.id,
           mealName: pm.meal.name,
@@ -42,7 +64,11 @@ export async function handleChatMessage(message: string): Promise<ChatResponse &
       }
     : null;
 
-  const response = await chat(message, { meals, pantry, currentPlan });
+  const now = new Date();
+  const today = localYmd(now);
+  const currentWeekStart = thisWeekMonday(now);
+
+  const response = await chat(message, { meals, pantry, currentPlan, today, currentWeekStart });
 
   const applied: boolean[] = [];
   for (const action of response.actions) {

@@ -5,8 +5,11 @@ interface ChatContext {
   pantry: { name: string; quantity: number; unit: string }[];
   currentPlan: {
     id: number;
+    weekStartDate: string;
     meals: { id: number; mealName: string; day: string; mealSlot: string; servings: number; status: string }[];
   } | null;
+  today: string;
+  currentWeekStart: string;
 }
 
 export interface ChatResponse {
@@ -18,12 +21,33 @@ export interface ChatResponse {
 }
 
 export async function chat(userMessage: string, context: ChatContext): Promise<ChatResponse> {
+  const loadedWeek = context.currentPlan?.weekStartDate ?? null;
+  const planLabel = loadedWeek
+    ? loadedWeek === context.currentWeekStart
+      ? `the current week (Monday ${loadedWeek})`
+      : `the week of Monday ${loadedWeek}`
+    : "no plan loaded";
+
   const prompt = `You are a helpful meal planning assistant. The user manages their weekly meals through this app.
+
+Date context (Monday-anchored weeks):
+- Today: ${context.today}
+- Current week starts: ${context.currentWeekStart}
+- Loaded plan covers: ${planLabel}
+
+If the user references "this week", "next week", "last week", or a specific date,
+resolve it to a Monday using the dates above. Then check whether it matches the
+loaded plan's weekStartDate.
+- If it matches, act on the loaded plan's meals.
+- If it does NOT match, do NOT invent plannedMealIds for other weeks. Reply with
+  type:"none" and a message explaining you only have data for the loaded week
+  (${loadedWeek ?? "no plan loaded"}). Suggest the user navigate to that week in
+  the planner first.
 
 Current state:
 - Recipe library: ${JSON.stringify(context.meals)}
 - Pantry: ${JSON.stringify(context.pantry)}
-- This week's plan: ${JSON.stringify(context.currentPlan)}
+- Loaded plan: ${JSON.stringify(context.currentPlan)}
 
 User message: "${userMessage}"
 
