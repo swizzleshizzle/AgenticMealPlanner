@@ -34,6 +34,35 @@ export const updatePlannedMeal = (planId: number, mealId: number, data: any) =>
 export const removePlannedMeal = (planId: number, mealId: number) =>
   apiFetch<void>(`/plans/${planId}/meals/${mealId}`, { method: "DELETE" });
 
+export interface DeductOverride {
+  ingredientId: number;
+  quantity: number;
+  unit: string;
+}
+
+export interface DeductShortfall {
+  ingredientId: number;
+  ingredientName: string;
+  requestedQuantity: number;
+  requestedUnit: string;
+  availableQuantity: number;
+  reason: "insufficient" | "no_density" | "no_pantry";
+}
+
+export interface MarkCookedResult extends PlannedMeal {
+  deduction: { shortfalls: DeductShortfall[] };
+}
+
+export const markCookedWithOverrides = (
+  planId: number,
+  plannedMealId: number,
+  overrides: DeductOverride[],
+) =>
+  apiFetch<MarkCookedResult>(`/plans/${planId}/meals/${plannedMealId}`, {
+    method: "PUT",
+    body: JSON.stringify({ status: "cooked", overrides }),
+  });
+
 // ---------------------------------------------------------------------------
 // Plan / date helpers shared by the Planner and the AddToPlanModal.
 // Kept here (not in a separate util module) so every consumer that already
