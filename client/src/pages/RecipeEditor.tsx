@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ChevronLeft, Save, GitBranch, GitCommit } from "lucide-react";
 import {
-  getMeal, getIngredients, createMeal, updateMeal, supersedeMeal, createVariant, type Meal,
+  getMeal, getIngredients, createMeal, updateMeal, supersedeMeal, createVariant,
+  type Meal, type Ingredient,
 } from "../api/meals";
 import { apiFetch } from "../api/client";
 import MealForm, { type MealFormData } from "../components/MealForm";
@@ -50,30 +51,54 @@ function mealToForm(m: Meal): Partial<MealFormData> {
   };
 }
 
-// Server expects ingredients as { ingredientId, quantity, unit, preparation }.
-// Rows from IngredientEditor that the user typed-in fresh have no id —
-// POST to /ingredients to mint one. POST returns 409 if the name already
-// exists (race against typeahead pool); on 409, refetch the pool and look
-// up by name.
+// Resolve each editor row to a server-side ingredientId. Rows can arrive
+// in three shapes:
+//   1. linked, unchanged — has `ingredientId` and `name` still matches that
+//      ingredient's actual name; use the id as-is.
+//   2. linked, renamed — has `ingredientId` but the user typed a different
+//      name; unlink and re-resolve from the typed name.
+//   3. fresh — no `ingredientId`; find by name, mint a new ingredient if
+//      nothing matches.
 async function ensureIngredientIds(rows: MealFormData["ingredients"]) {
+  let pool: Ingredient[] | null = null;
+  const getPool = async () => pool ?? (pool = await getIngredients());
+  const norm = (s: string) => s.trim().toLowerCase();
+
   const out: { ingredientId: number; quantity: number; unit: string; preparation?: string }[] = [];
   for (const r of rows) {
     let id = r.ingredientId;
-    if (!id) {
-      try {
-        const created = await apiFetch<{ id: number }>("/ingredients", {
-          method: "POST",
-          body: JSON.stringify({ name: r.name, category: r.category ?? "other", defaultUnit: r.unit }),
-        });
-        id = created.id;
-      } catch (e: any) {
-        // Resolve the race: the ingredient already exists, find it by name.
-        const all = await getIngredients();
-        const found = all.find((i) => i.name.toLowerCase() === r.name.toLowerCase());
-        if (!found) throw e;
-        id = found.id;
+
+    if (id !== undefined) {
+      const linked = (await getPool()).find((i) => i.id === id);
+      if (linked && norm(linked.name) !== norm(r.name)) {
+        id = undefined;
       }
     }
+
+    if (id === undefined) {
+      const found = (await getPool()).find((i) => norm(i.name) === norm(r.name));
+      if (found) {
+        id = found.id;
+      } else {
+        try {
+          const created = await apiFetch<{ id: number }>("/ingredients", {
+            method: "POST",
+            body: JSON.stringify({ name: r.name.trim(), category: r.category ?? "other", defaultUnit: r.unit }),
+          });
+          id = created.id;
+        } catch (e: any) {
+          // Race: somebody else minted the same name between our pool fetch
+          // and the POST. Re-fetch the pool and look up by name.
+          pool = null;
+          const fresh = await getPool();
+          const found2 = fresh.find((i) => norm(i.name) === norm(r.name));
+          if (!found2) throw e;
+          id = found2.id;
+        }
+      }
+    }
+
+    if (id === undefined) throw new Error(`could not resolve ingredient for "${r.name}"`);
     out.push({ ingredientId: id, quantity: r.quantity, unit: r.unit, preparation: r.preparation });
   }
   return out;
