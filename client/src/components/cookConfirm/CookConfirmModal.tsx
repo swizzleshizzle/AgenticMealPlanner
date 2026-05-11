@@ -11,12 +11,21 @@ const UNIT_OPTIONS_VOLUME = ["tsp", "tbsp", "cup", "ml", "l", "fl oz"];
 const UNIT_OPTIONS_MASS = ["g", "kg", "oz", "lb"];
 const UNIT_OPTIONS_COUNT = ["count"];
 
-function unitOptionsFor(unit: string): string[] {
+function familyFor(unit: string): string[] | null {
   if (UNIT_OPTIONS_VOLUME.includes(unit)) return UNIT_OPTIONS_VOLUME;
   if (UNIT_OPTIONS_MASS.includes(unit)) return UNIT_OPTIONS_MASS;
   if (UNIT_OPTIONS_COUNT.includes(unit)) return UNIT_OPTIONS_COUNT;
-  // Unknown family — only allow the original unit.
-  return [unit];
+  return null;
+}
+
+function unitOptionsFor(unit: string, ingredientDefaultUnit: string): string[] {
+  // Known family — return it. Covers the common case (recipe says "tbsp" → volume options).
+  const own = familyFor(unit);
+  if (own) return own;
+  // Exotic unit (e.g. "whole", "stick") — fall back to the ingredient's default-unit family
+  // so the user has somewhere sensible to switch to. Keep the exotic unit selectable.
+  const fallback = familyFor(ingredientDefaultUnit) ?? [];
+  return Array.from(new Set([unit, ...fallback]));
 }
 
 function formatQty(n: number): string {
@@ -52,6 +61,7 @@ export default function CookConfirmModal({ pm, pantryByIngredient, onCancel, onS
       key: `mi-${mi.id}`,
       ingredientId: mi.ingredient.id,
       ingredientName: mi.ingredient.name,
+      ingredientDefaultUnit: mi.ingredient.defaultUnit,
       quantity: roundQty(mi.quantity * multiplier),
       unit: mi.unit,
       checked: true,
@@ -89,6 +99,7 @@ export default function CookConfirmModal({ pm, pantryByIngredient, onCancel, onS
         key: `adhoc-${adhocCounter}`,
         ingredientId: i.id,
         ingredientName: i.name,
+        ingredientDefaultUnit: i.defaultUnit,
         quantity: 1,
         unit: i.defaultUnit,
         checked: true,
@@ -142,7 +153,7 @@ export default function CookConfirmModal({ pm, pantryByIngredient, onCancel, onS
             <CookConfirmRow
               key={r.key}
               row={r}
-              unitOptions={unitOptionsFor(r.unit)}
+              unitOptions={unitOptionsFor(r.unit, r.ingredientDefaultUnit)}
               hint={formatTotalsByUnit(pantryByIngredient.get(r.ingredientId))}
               onChange={(patch) => updateRow(r.key, patch)}
               onRemove={r.adhoc ? () => removeRow(r.key) : undefined}
