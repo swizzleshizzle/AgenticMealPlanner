@@ -19,13 +19,25 @@ function familyFor(unit: string): string[] | null {
 }
 
 function unitOptionsFor(unit: string, ingredientDefaultUnit: string): string[] {
-  // Known family — return it. Covers the common case (recipe says "tbsp" → volume options).
+  // Union of the row's own family + the ingredient's default-unit family.
+  //   - Same family for both → just that family (common case, unchanged).
+  //   - Cross-family (e.g. recipe in tbsp, ingredient defaults to g) → both families,
+  //     so the user can switch to whichever unit they actually used.
+  //   - Exotic recipe unit (no family) → just the ingredient's family.
+  //   - Both unknown → only the original unit, so the row stays selectable.
+  // The exotic recipe unit (if present) is always appended at the end so the
+  // row's current value remains in the dropdown.
   const own = familyFor(unit);
-  if (own) return own;
-  // Exotic unit (e.g. "whole", "stick") — fall back to the ingredient's default-unit family
-  // so the user has somewhere sensible to switch to. Keep the exotic unit selectable.
-  const fallback = familyFor(ingredientDefaultUnit) ?? [];
-  return Array.from(new Set([unit, ...fallback]));
+  const ingredientFamily = familyFor(ingredientDefaultUnit);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const u of [...(own ?? []), ...(ingredientFamily ?? []), unit]) {
+    if (!seen.has(u)) {
+      seen.add(u);
+      out.push(u);
+    }
+  }
+  return out;
 }
 
 function formatQty(n: number): string {
