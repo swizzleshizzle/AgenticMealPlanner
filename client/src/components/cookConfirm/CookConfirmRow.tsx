@@ -5,6 +5,8 @@ export interface CookConfirmRowState {
   key: string;
   ingredientId: number;
   ingredientName: string;
+  /** The ingredient's own defaultUnit. Used to widen the unit dropdown when the recipe's unit is exotic (e.g. "whole"). */
+  ingredientDefaultUnit: string;
   quantity: number;
   unit: string;
   /** Whether this row will be sent to the server. Recipe rows default true; ad-hoc rows always true. */
