@@ -2,6 +2,7 @@ import { z } from "zod";
 import { PrismaClient } from "@prisma/client";
 import type { ToolDef } from "../types.js";
 import { updatePlannedMeal } from "../../services/plannerService.js";
+import { deductIngredientsForMeal } from "../../services/pantryService.js";
 
 const prisma = new PrismaClient();
 
@@ -82,4 +83,85 @@ const scaleServings: ToolDef = {
   },
 };
 
-export const planTools: ToolDef[] = [getPlannedWeek, swapMeal, skipMeal, scaleServings];
+const CookStyleEnum = z.enum(["cook_fresh", "batch_prep", "leftovers"]);
+
+const addPlannedMeal: ToolDef = {
+  name: "add_planned_meal",
+  description:
+    "Add a meal to the week's plan. Creates the WeeklyPlan if one doesn't exist for weekStartDate. day is lowercase weekday (monday..sunday). mealSlot is 'breakfast' | 'lunch' | 'dinner' | 'snack'.",
+  schema: z.object({
+    weekStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    mealId: z.number().int(),
+    day: z.enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]),
+    mealSlot: z.enum(["breakfast", "lunch", "dinner", "snack"]),
+    servings: z.number().positive().default(2),
+    cookStyle: CookStyleEnum.optional(),
+  }),
+  handler: async (input) => {
+    // weekStartDate has no @unique constraint on WeeklyPlan, so use findFirst + create.
+    const existing = await prisma.weeklyPlan.findFirst({
+      where: { weekStartDate: new Date(input.weekStartDate) },
+    });
+    const plan =
+      existing ??
+      (await prisma.weeklyPlan.create({
+        data: { weekStartDate: new Date(input.weekStartDate), status: "active" },
+      }));
+    const plannedMeal = await prisma.plannedMeal.create({
+      data: {
+        planId: plan.id,
+        mealId: input.mealId,
+        day: input.day,
+        mealSlot: input.mealSlot,
+        servings: input.servings,
+        status: "planned",
+        ...(input.cookStyle ? { cookStyle: input.cookStyle } : {}),
+      },
+    });
+    return { plannedMeal };
+  },
+};
+
+const markMealCooked: ToolDef = {
+  name: "mark_meal_cooked",
+  description:
+    "Mark a planned meal cooked and deduct ingredients from the pantry. overrides[] lets you specify actual quantities used: [{ ingredientId, quantity, unit }]. Returns the updated plannedMeal and any shortfalls.",
+  schema: z.object({
+    plannedMealId: z.number().int(),
+    overrides: z
+      .array(
+        z.object({
+          ingredientId: z.number().int(),
+          quantity: z.number().positive(),
+          unit: z.string(),
+        }),
+      )
+      .optional(),
+  }),
+  handler: async (input) => {
+    return await prisma.$transaction(async (tx: any) => {
+      const pm = await tx.plannedMeal.findUnique({
+        where: { id: input.plannedMealId },
+        include: { meal: true },
+      });
+      if (!pm) throw new Error(`PlannedMeal ${input.plannedMealId} not found`);
+      // Mirror the cook-confirm route: multiplier is ratio of planned servings to meal's default servings.
+      const multiplier = pm.servings / pm.meal.servings;
+      const deduction = await deductIngredientsForMeal(pm.mealId, multiplier, input.overrides, tx);
+      const plannedMeal = await tx.plannedMeal.update({
+        where: { id: pm.id },
+        data: { status: "cooked" },
+      });
+      return { plannedMeal, shortfalls: deduction.shortfalls };
+    });
+  },
+};
+
+export const planTools: ToolDef[] = [
+  getPlannedWeek,
+  addPlannedMeal,
+  swapMeal,
+  skipMeal,
+  scaleServings,
+  markMealCooked,
+];
