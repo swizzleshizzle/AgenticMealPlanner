@@ -3,6 +3,10 @@ import { promisify } from "util";
 import path from "path";
 import os from "os";
 
+// Legacy CLI bridge — still used by receiptParser, mealPlanner, recipeParser
+// (one-shot LLM calls, not agentic). New chat agent uses @anthropic-ai/claude-agent-sdk
+// via ../agent/runner.ts. These three callers could migrate similarly in a follow-up.
+
 const execFileAsync = promisify(execFile);
 
 function resolveClaudeBin(): string {
