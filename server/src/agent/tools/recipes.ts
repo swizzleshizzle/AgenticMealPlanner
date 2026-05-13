@@ -55,9 +55,10 @@ const getMealDetail: ToolDef = {
   },
 };
 
-const createVariantTool: ToolDef = {
-  name: "create_variant",
-  description: "Create a variant of an existing meal, linked to the source as parent (same recipe family, incremented version).",
+const createVersionTool: ToolDef = {
+  name: "create_recipe_version",
+  description:
+    "Create a new version of an existing recipe. The new meal becomes a child of the source (linked via parentMealId, with incremented versionNumber). Use this when the user wants to update or improve a recipe while keeping the prior version in history. Both versions share the same recipeId, so they appear together in the recipe family.",
   schema: z.object({
     sourceMealId: z.number().int(),
     name: z.string().optional(),
@@ -79,4 +80,4 @@ const archiveMealTool: ToolDef = {
   },
 };
 
-export const recipeTools: ToolDef[] = [getMeals, getMealDetail, createVariantTool, archiveMealTool];
+export const recipeTools: ToolDef[] = [getMeals, getMealDetail, createVersionTool, archiveMealTool];
