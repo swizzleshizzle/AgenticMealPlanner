@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 const ctx = { pageContext: {} };
 const getMeals = recipeTools.find((t) => t.name === "get_meals")!;
 const getDetail = recipeTools.find((t) => t.name === "get_meal_detail")!;
-const createVariant = recipeTools.find((t) => t.name === "create_variant")!;
+const createVersion = recipeTools.find((t) => t.name === "create_recipe_version")!;
 const archive = recipeTools.find((t) => t.name === "archive_meal")!;
 
 beforeEach(async () => {
@@ -49,10 +49,10 @@ describe("get_meal_detail", () => {
   });
 });
 
-describe("create_variant", () => {
+describe("create_recipe_version", () => {
   it("returns a new meal with parentMealId pointing at the source", async () => {
     const src = await prisma.meal.create({ data: { name: "test-pasta", isDefault: true, recipeId: 99706 } });
-    const result: any = await createVariant.handler(
+    const result: any = await createVersion.handler(
       { sourceMealId: src.id, name: "test-pasta-spicy" },
       ctx,
     );
