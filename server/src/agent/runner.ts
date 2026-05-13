@@ -115,8 +115,9 @@ export async function runAgent(args: RunAgentArgs): Promise<AgentResult> {
       },
       // Disable session persistence for ephemeral API calls
       persistSession: false,
-      // Don't prompt for permissions
-      permissionMode: "acceptEdits",
+      // Bypass permissions for MCP tool execution (safety vetted)
+      permissionMode: "bypassPermissions",
+      allowDangerouslySkipPermissions: true,
     },
   });
 
