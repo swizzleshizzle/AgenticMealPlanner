@@ -7,23 +7,11 @@ export interface ToolSchemaForSdk {
 }
 
 export function buildToolSchemas(tools: ToolDef[]): ToolSchemaForSdk[] {
-  return tools.map((t) => {
-    // Use Zod v4 native toJSONSchema method if available
-    let inputSchema: Record<string, any>;
-
-    if (typeof (t.schema as any).toJSONSchema === "function") {
-      inputSchema = (t.schema as any).toJSONSchema() as Record<string, any>;
-    } else {
-      // This should not happen with Zod v4
-      inputSchema = { type: "object" };
-    }
-
-    return {
-      name: t.name,
-      description: t.description,
-      input_schema: inputSchema,
-    };
-  });
+  return tools.map((t) => ({
+    name: t.name,
+    description: t.description,
+    input_schema: (t.schema as any).toJSONSchema() as Record<string, any>,
+  }));
 }
 
 export async function dispatchToolCall(
