@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { Sparkles, Send } from "lucide-react";
-import { sendMessage, type ChatResponse } from "../api/chat";
+import { sendMessage } from "../api/chat";
 import Button from "../components/ui/Button";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
-  actions?: { type: string; applied: boolean }[];
 }
 
 const SUGGESTIONS = [
@@ -26,6 +26,7 @@ function formatBold(text: string): string {
 }
 
 export default function Chat() {
+  const location = useLocation();
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
@@ -45,14 +46,11 @@ export default function Chat() {
     setMessages((prev) => [...prev, { role: "user", content: text }]);
     setLoading(true);
     try {
-      const res: ChatResponse = await sendMessage(text);
+      const pageContext = { path: location.pathname };
+      const res = await sendMessage(text, pageContext);
       setMessages((prev) => [
         ...prev,
-        {
-          role: "assistant",
-          content: res.message,
-          actions: res.actions.map((a, i) => ({ type: a.type, applied: res.applied[i] })),
-        },
+        { role: "assistant", content: res.message },
       ]);
     } catch {
       setMessages((prev) => [...prev, { role: "assistant", content: "Sorry — I couldn't reach the assistant. Try again?" }]);
@@ -86,18 +84,6 @@ export default function Chat() {
               }`}
             >
               <div dangerouslySetInnerHTML={{ __html: formatBold(m.content) }} />
-              {m.actions && m.actions.length > 0 && (
-                <div className="flex gap-1.5 mt-2.5 flex-wrap">
-                  {m.actions.map((a, j) => (
-                    <span
-                      key={j}
-                      className="text-[12px] px-2.5 py-[5px] bg-surface-2 border border-line rounded-[8px] text-ink-1 font-medium"
-                    >
-                      {a.type}{a.applied ? " · applied" : ""}
-                    </span>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         ))}
