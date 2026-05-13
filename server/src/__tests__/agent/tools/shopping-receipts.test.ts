@@ -12,13 +12,13 @@ beforeEach(async () => {
   await prisma.receiptItem.deleteMany({ where: { receipt: { store: { startsWith: "test-" } } } });
   await prisma.receipt.deleteMany({ where: { store: { startsWith: "test-" } } });
   await prisma.plannedMeal.deleteMany({ where: { meal: { name: { startsWith: "test-" } } } });
-  await prisma.weeklyPlan.deleteMany({ where: { weekStartDate: new Date("2026-05-11") } });
+  await prisma.weeklyPlan.deleteMany({ where: { weekStartDate: new Date("2099-01-05") } });
   await prisma.meal.deleteMany({ where: { name: { startsWith: "test-" } } });
 });
 
 describe("get_shopping_list", () => {
   it("returns an items array (possibly empty) for a known planId", async () => {
-    const plan = await prisma.weeklyPlan.create({ data: { weekStartDate: new Date("2026-05-11"), status: "active" } });
+    const plan = await prisma.weeklyPlan.create({ data: { weekStartDate: new Date("2099-01-05"), status: "active" } });
     const result: any = await getShopping.handler({ planId: plan.id }, ctx);
     expect(Array.isArray(result.items)).toBe(true);
   });

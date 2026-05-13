@@ -15,13 +15,13 @@ async function seedMeal(name: string) {
 describe("get_planned_week tool", () => {
   beforeEach(async () => {
     await prisma.plannedMeal.deleteMany({ where: { meal: { name: { startsWith: "test-" } } } });
-    await prisma.weeklyPlan.deleteMany({ where: { weekStartDate: { in: [new Date("2026-06-01"), new Date("2026-05-11")] } } });
+    await prisma.weeklyPlan.deleteMany({ where: { weekStartDate: { in: [new Date("2099-01-19"), new Date("2099-01-05")] } } });
     await prisma.meal.deleteMany({ where: { name: { startsWith: "test-" } } });
   });
 
   it("returns null when no plan exists for the week", async () => {
     const result: any = await getPlannedWeek.handler(
-      { weekStartDate: "2026-06-01" },
+      { weekStartDate: "2099-01-19" },
       ctx,
     );
     expect(result.plan).toBeNull();
@@ -30,7 +30,7 @@ describe("get_planned_week tool", () => {
   it("returns the plan with planned meals for the given week", async () => {
     const meal = await seedMeal("test-chili");
     const plan = await prisma.weeklyPlan.create({
-      data: { weekStartDate: new Date("2026-05-11"), status: "active" },
+      data: { weekStartDate: new Date("2099-01-05"), status: "active" },
     });
     await prisma.plannedMeal.create({
       data: {
@@ -43,7 +43,7 @@ describe("get_planned_week tool", () => {
       },
     });
     const result: any = await getPlannedWeek.handler(
-      { weekStartDate: "2026-05-11" },
+      { weekStartDate: "2099-01-05" },
       ctx,
     );
     expect(result.plan).not.toBeNull();
@@ -54,7 +54,7 @@ describe("get_planned_week tool", () => {
   it("defaults to the page context's weekStartDate when no arg given", async () => {
     const meal = await seedMeal("test-chili");
     const plan = await prisma.weeklyPlan.create({
-      data: { weekStartDate: new Date("2026-05-11"), status: "active" },
+      data: { weekStartDate: new Date("2099-01-05"), status: "active" },
     });
     await prisma.plannedMeal.create({
       data: {
@@ -68,7 +68,7 @@ describe("get_planned_week tool", () => {
     });
     const result: any = await getPlannedWeek.handler(
       {},
-      { pageContext: { weekStartDate: "2026-05-11" } },
+      { pageContext: { weekStartDate: "2099-01-05" } },
     );
     expect(result.plan?.meals).toHaveLength(1);
   });
