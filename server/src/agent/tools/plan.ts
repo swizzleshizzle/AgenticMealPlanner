@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { PrismaClient } from "@prisma/client";
 import type { ToolDef } from "../types.js";
+import { updatePlannedMeal } from "../../services/plannerService.js";
 
 const prisma = new PrismaClient();
 
@@ -45,5 +46,40 @@ const getPlannedWeek: ToolDef = {
   },
 };
 
-// Mutation tools added in subsequent tasks.
-export const planTools: ToolDef[] = [getPlannedWeek];
+const swapMeal: ToolDef = {
+  name: "swap_meal",
+  description: "Replace the recipe on a planned-meal slot with a different recipe.",
+  schema: z.object({
+    plannedMealId: z.number().int(),
+    newMealId: z.number().int(),
+  }),
+  handler: async (input) => {
+    const plannedMeal = await updatePlannedMeal(input.plannedMealId, { mealId: input.newMealId });
+    return { plannedMeal };
+  },
+};
+
+const skipMeal: ToolDef = {
+  name: "skip_meal",
+  description: "Mark a planned meal as skipped (won't be cooked, won't deduct pantry).",
+  schema: z.object({ plannedMealId: z.number().int() }),
+  handler: async (input) => {
+    const plannedMeal = await updatePlannedMeal(input.plannedMealId, { status: "skipped" });
+    return { plannedMeal };
+  },
+};
+
+const scaleServings: ToolDef = {
+  name: "scale_servings",
+  description: "Change the number of servings on a planned meal (affects pantry deduction).",
+  schema: z.object({
+    plannedMealId: z.number().int(),
+    newServings: z.number().positive(),
+  }),
+  handler: async (input) => {
+    const plannedMeal = await updatePlannedMeal(input.plannedMealId, { servings: input.newServings });
+    return { plannedMeal };
+  },
+};
+
+export const planTools: ToolDef[] = [getPlannedWeek, swapMeal, skipMeal, scaleServings];
