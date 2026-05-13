@@ -1,3 +1,6 @@
+// DESTRUCTIVE-CLEANUP-SKIPPED: these tests use unscoped prisma.*.deleteMany()
+// which wipes the entire dev DB. describe.skip() until a dedicated test DB exists.
+// To re-enable: point DATABASE_URL at a throwaway DB, then remove the .skip suffixes.
 import { describe, it, expect, beforeEach } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { deductIngredientsForMeal } from "../services/pantryService.js";
@@ -37,7 +40,7 @@ async function makeBatch(ingredientId: number, quantity: number, unit: string) {
   });
 }
 
-describe("deductIngredientsForMeal — overrides path", () => {
+describe.skip("deductIngredientsForMeal — overrides path", () => {
   beforeEach(reset);
 
   it("happy path: deducts each override row from pantry, no shortfalls", async () => {
@@ -183,7 +186,7 @@ describe("deductIngredientsForMeal — overrides path", () => {
   });
 });
 
-describe("deductIngredientsForMeal — recipe-derived path (overrides omitted)", () => {
+describe.skip("deductIngredientsForMeal — recipe-derived path (overrides omitted)", () => {
   beforeEach(reset);
 
   it("falls back to MealIngredient rows scaled by multiplier", async () => {

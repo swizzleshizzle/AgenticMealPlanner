@@ -19,7 +19,7 @@ describe("get_meals", () => {
   it("returns active default meals by default", async () => {
     await prisma.meal.create({ data: { name: "test-pasta", isDefault: true, recipeId: 99701 } });
     await prisma.meal.create({ data: { name: "test-pasta-spicy", isDefault: false, recipeId: 99701 } });
-    const result: any = await getMeals.handler({}, ctx);
+    const result: any = await getMeals.handler({ q: "test-pasta", limit: 100 }, ctx);
     const names = result.meals.map((m: any) => m.name);
     expect(names).toContain("test-pasta");
     expect(names).not.toContain("test-pasta-spicy");

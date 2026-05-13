@@ -11,7 +11,7 @@ const scale = planTools.find((t) => t.name === "scale_servings")!;
 async function seedPlannedMeal() {
   const a = await prisma.meal.create({ data: { name: "test-A", isDefault: true, recipeId: 99901 } });
   const b = await prisma.meal.create({ data: { name: "test-B", isDefault: true, recipeId: 99902 } });
-  const plan = await prisma.weeklyPlan.create({ data: { weekStartDate: new Date("2026-05-11"), status: "active" } });
+  const plan = await prisma.weeklyPlan.create({ data: { weekStartDate: new Date("2099-01-05"), status: "active" } });
   const pm = await prisma.plannedMeal.create({
     data: { planId: plan.id, mealId: a.id, day: "monday", mealSlot: "dinner", servings: 2, status: "planned" },
   });
@@ -20,7 +20,7 @@ async function seedPlannedMeal() {
 
 beforeEach(async () => {
   await prisma.plannedMeal.deleteMany({ where: { meal: { name: { startsWith: "test-" } } } });
-  await prisma.weeklyPlan.deleteMany({ where: { weekStartDate: new Date("2026-05-11") } });
+  await prisma.weeklyPlan.deleteMany({ where: { weekStartDate: new Date("2099-01-05") } });
   await prisma.meal.deleteMany({ where: { name: { startsWith: "test-" } } });
 });
 
