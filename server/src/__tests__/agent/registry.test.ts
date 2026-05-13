@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { buildToolSchemas, dispatchToolCall } from "../../agent/registry.js";
+import { dispatchToolCall } from "../../agent/registry.js";
 import type { ToolDef, PageContext } from "../../agent/types.js";
 
 const echoTool: ToolDef<{ msg: string }, { echoed: string }> = {
@@ -12,17 +12,6 @@ const echoTool: ToolDef<{ msg: string }, { echoed: string }> = {
 
 const tools = [echoTool];
 const ctx: PageContext = {};
-
-describe("buildToolSchemas", () => {
-  it("converts ZodSchema to JSON Schema and preserves name/description", () => {
-    const schemas = buildToolSchemas(tools);
-    expect(schemas).toHaveLength(1);
-    expect(schemas[0].name).toBe("echo");
-    expect(schemas[0].description).toBe("Echoes the input back");
-    expect(schemas[0].input_schema.type).toBe("object");
-    expect(schemas[0].input_schema.properties.msg.type).toBe("string");
-  });
-});
 
 describe("dispatchToolCall", () => {
   it("invokes handler with parsed input and returns output", async () => {

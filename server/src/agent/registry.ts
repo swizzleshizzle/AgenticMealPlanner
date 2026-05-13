@@ -1,19 +1,5 @@
 import type { ToolDef, PageContext } from "./types.js";
 
-export interface ToolSchemaForSdk {
-  name: string;
-  description: string;
-  input_schema: Record<string, any>;
-}
-
-export function buildToolSchemas(tools: ToolDef[]): ToolSchemaForSdk[] {
-  return tools.map((t) => ({
-    name: t.name,
-    description: t.description,
-    input_schema: (t.schema as any).toJSONSchema() as Record<string, any>,
-  }));
-}
-
 export async function dispatchToolCall(
   tools: ToolDef[],
   name: string,
