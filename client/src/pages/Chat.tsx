@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Sparkles, Send } from "lucide-react";
 import { sendMessage } from "../api/chat";
+import { derivePageContext } from "../api/pageContext";
 import Button from "../components/ui/Button";
 
 interface ToolCall {
@@ -52,7 +53,7 @@ export default function Chat() {
     setMessages((prev) => [...prev, { role: "user", content: text }]);
     setLoading(true);
     try {
-      const pageContext = { path: location.pathname };
+      const pageContext = derivePageContext(location);
       const res = await sendMessage(text, pageContext);
       setMessages((prev) => [
         ...prev,
