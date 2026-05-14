@@ -1,3 +1,6 @@
+// DESTRUCTIVE-CLEANUP-SKIPPED: these tests use unscoped prisma.*.deleteMany()
+// which wipes the entire dev DB. describe.skip() until a dedicated test DB exists.
+// To re-enable: point DATABASE_URL at a throwaway DB, then remove the .skip suffixes.
 import { describe, it, expect, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
@@ -62,7 +65,7 @@ async function seed() {
   return { chicken, soy, mealId, plan, pm };
 }
 
-describe("PUT /api/plans/:planId/meals/:mealId — cooked transition with overrides", () => {
+describe.skip("PUT /api/plans/:planId/meals/:mealId — cooked transition with overrides", () => {
   beforeEach(reset);
 
   it("happy path: deducts overrides, returns shortfalls=[]", async () => {
