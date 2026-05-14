@@ -30,6 +30,7 @@ import { buildSystemPrompt } from "./prompt.js";
 import { dispatchToolCall } from "./registry.js";
 import { allTools } from "./tools/index.js";
 import type { PageContext, AgentResult } from "./types.js";
+import { resolveClaudeBinary } from "../claude/binaryResolver.js";
 
 export interface RunAgentArgs {
   userMessage: string;
@@ -61,6 +62,7 @@ export async function runAgent(args: RunAgentArgs): Promise<AgentResult> {
   const currentWeekStart = thisWeekMonday(now);
 
   const systemPrompt = buildSystemPrompt({ today, currentWeekStart, pageContext });
+  const claudeBin = resolveClaudeBinary();
 
   // Track tool calls accumulated during the conversation
   const toolCalls: AgentResult["toolCalls"] = [];
@@ -115,6 +117,7 @@ export async function runAgent(args: RunAgentArgs): Promise<AgentResult> {
       },
       // Disable session persistence for ephemeral API calls
       persistSession: false,
+      ...(claudeBin ? { pathToClaudeCodeExecutable: claudeBin } : {}),
       // Bypass permissions for MCP tool execution (safety vetted)
       permissionMode: "bypassPermissions",
       allowDangerouslySkipPermissions: true,

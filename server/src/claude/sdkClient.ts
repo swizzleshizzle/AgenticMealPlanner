@@ -9,11 +9,11 @@
  * Binary resolution: on glibc Linux the SDK incorrectly prefers the musl
  * optional package when it is installed but unrunnable. We detect this and
  * fall back to the glibc build via pathToClaudeCodeExecutable.
+ * See ./binaryResolver.ts for implementation details.
  */
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { createRequire } from "module";
-import { execFileSync } from "child_process";
+import { resolveClaudeBinary } from "./binaryResolver.js";
 
 export interface CallClaudeViaSdkArgs {
   userPrompt: string;
@@ -30,41 +30,6 @@ export function stripFences(raw: string): string {
   const fenced = trimmed.match(/^```(?:[a-zA-Z]+)?\n([\s\S]*?)\n```$/);
   if (fenced) return fenced[1].trim();
   return trimmed;
-}
-
-/**
- * Resolve a runnable Claude Code binary path.
- *
- * The SDK tries musl before glibc on Linux. When the musl package is installed
- * but the musl interpreter is absent (glibc-only host), the binary resolves but
- * crashes at exec time. We verify each candidate with a quick --version probe
- * and return the first working path.
- */
-function resolveClaudeBinary(): string | undefined {
-  const req = createRequire(import.meta.url);
-  const candidates = [
-    "@anthropic-ai/claude-agent-sdk-linux-x64/claude",
-    "@anthropic-ai/claude-agent-sdk-linux-x64-musl/claude",
-    "@anthropic-ai/claude-agent-sdk-linux-arm64/claude",
-    "@anthropic-ai/claude-agent-sdk-linux-arm64-musl/claude",
-    "@anthropic-ai/claude-agent-sdk-darwin-x64/claude",
-    "@anthropic-ai/claude-agent-sdk-darwin-arm64/claude",
-  ];
-  for (const pkg of candidates) {
-    let resolved: string;
-    try {
-      resolved = req.resolve(pkg);
-    } catch {
-      continue;
-    }
-    try {
-      execFileSync(resolved, ["--version"], { timeout: 5000, stdio: "ignore" });
-      return resolved;
-    } catch {
-      // binary exists but can't run (e.g. musl on glibc host) — try next
-    }
-  }
-  return undefined;
 }
 
 // Resolved once at module load; undefined means let the SDK handle it.
