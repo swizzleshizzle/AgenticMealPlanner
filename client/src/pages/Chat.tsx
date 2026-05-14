@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Sparkles, Send } from "lucide-react";
 import { sendMessage } from "../api/chat";
+import type { HistoryItem } from "../api/chat";
 import { derivePageContext } from "../api/pageContext";
 import Button from "../components/ui/Button";
 
@@ -49,12 +50,20 @@ export default function Chat() {
   const handleSend = async (overrideText?: string) => {
     const text = (overrideText ?? input).trim();
     if (!text || loading) return;
+
+    // Derive history from current messages BEFORE any state mutation.
+    // The initial greeting is assistant-only and not a real turn, so we
+    // include all visible user/assistant turns up to this point.
+    const history: HistoryItem[] = messages
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m) => ({ role: m.role, content: m.content }));
+
     setInput("");
     setMessages((prev) => [...prev, { role: "user", content: text }]);
     setLoading(true);
     try {
       const pageContext = derivePageContext(location);
-      const res = await sendMessage(text, pageContext);
+      const res = await sendMessage(text, pageContext, history);
       setMessages((prev) => [
         ...prev,
         {
