@@ -13,7 +13,7 @@ import receiptRoutes from "./routes/receipts.js";
 import { ensurePopplerAvailable } from "./services/pdfExtraction.js";
 import { purgeConsumedBatches } from "./jobs/purgeConsumedBatches.js";
 
-const app = express();
+export const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
@@ -39,13 +39,13 @@ ensurePopplerAvailable().then(({ pdfimages, pdftoppm }) => {
   }
 });
 
-// Only start listening if this file is run directly (not imported for testing)
-if (process.env.NODE_ENV !== "test") {
+// Only start listening if not running under vitest (VITEST is set by vitest automatically)
+if (!process.env.VITEST) {
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
 
-  // Nightly at 03:00 server time. Skipped under NODE_ENV=test.
+  // Nightly at 03:00 server time. Skipped under vitest.
   cron.schedule("0 3 * * *", async () => {
     try {
       const count = await purgeConsumedBatches();
