@@ -33,9 +33,23 @@ describe("derivePageContext", () => {
     });
   });
 
-  it("does not extract id from sub-paths like /recipes/:id/edit", () => {
-    expect(derivePageContext({ pathname: "/recipes/5/edit" } as any)).toEqual({
-      path: "/recipes/5/edit",
+  it("extracts mealId from /recipes/:id", () => {
+    expect(derivePageContext({ pathname: "/recipes/12" } as any)).toEqual({
+      path: "/recipes/12",
+      mealId: 12,
+    });
+  });
+
+  it("extracts mealId from /recipes/:id/edit", () => {
+    expect(derivePageContext({ pathname: "/recipes/12/edit" } as any)).toEqual({
+      path: "/recipes/12/edit",
+      mealId: 12,
+    });
+  });
+
+  it("does not match /recipes/new", () => {
+    expect(derivePageContext({ pathname: "/recipes/new" } as any)).toEqual({
+      path: "/recipes/new",
     });
   });
 });
