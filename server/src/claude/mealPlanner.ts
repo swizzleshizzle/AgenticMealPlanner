@@ -1,4 +1,4 @@
-import { callClaude } from "./cli.js";
+import { callClaudeViaSdk } from "./sdkClient.js";
 import { filterValidPlannedMeals, type MealCapability } from "./mealPlannerRules.js";
 
 interface MealSummary {
@@ -68,7 +68,7 @@ Return ONLY valid JSON:
   ]
 }`;
 
-  const raw = await callClaude(prompt, { timeout: 180_000 });
+  const raw = await callClaudeViaSdk({ userPrompt: prompt, timeoutMs: 180_000 });
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
     throw new Error("Failed to extract JSON from Claude response");
