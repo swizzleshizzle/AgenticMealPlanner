@@ -1,4 +1,4 @@
-import { callClaude } from "./cli.js";
+import { callClaudeViaSdk } from "./sdkClient.js";
 import path from "path";
 import type { ParsedReceiptPayload } from "../services/receiptParseSessions.js";
 
@@ -101,12 +101,15 @@ export function extractJson(raw: string): string | null {
 
 export async function runFirstPass(input: ReceiptParseInput): Promise<ParsedReceiptPayload> {
   const prompt = buildFirstPassPrompt(input);
-  const opts: Parameters<typeof callClaude>[1] = { timeout: 300_000 };
+  const args: Parameters<typeof callClaudeViaSdk>[0] = {
+    userPrompt: prompt,
+    timeoutMs: 300_000,
+  };
   if (input.kind !== "text") {
-    opts.addDirs = [path.dirname(path.resolve(input.path))];
-    opts.allowedTools = ["Read"];
+    args.allowedTools = ["Read"];
+    args.additionalDirectories = [path.dirname(path.resolve(input.path))];
   }
-  const raw = await callClaude(prompt, opts);
+  const raw = await callClaudeViaSdk(args);
   const jsonText = extractJson(raw);
   if (!jsonText) {
     throw new Error("Claude returned no parseable JSON for the first pass");
@@ -120,7 +123,7 @@ export async function runRescuePass(
   ingredients: Array<{ id: number; name: string }>,
 ): Promise<Array<{ index: number; ingredientId: number | null }>> {
   const prompt = buildRescuePrompt(weakItems, ingredients);
-  const raw = await callClaude(prompt, { timeout: 120_000 });
+  const raw = await callClaudeViaSdk({ userPrompt: prompt, timeoutMs: 120_000 });
   const jsonText = extractJson(raw);
   if (!jsonText) {
     throw new Error("Claude returned no parseable JSON for the rescue pass");
