@@ -11,3 +11,4 @@ calendar-tokens.json
 server/storage/
 .worktrees/
 .superpowers/
+server/.env.test
