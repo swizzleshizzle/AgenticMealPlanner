@@ -7,6 +7,7 @@ interface LocationLike {
 const PATTERNS: { re: RegExp; key: keyof Omit<PageContext, "path" | "weekStartDate"> }[] = [
   { re: /^\/plans\/(\d+)\/?$/, key: "planId" },
   { re: /^\/meals\/(\d+)\/?$/, key: "mealId" },
+  { re: /^\/recipes\/(\d+)(?:\/.*)?$/, key: "mealId" },
 ];
 
 export function derivePageContext(location: LocationLike): PageContext {
