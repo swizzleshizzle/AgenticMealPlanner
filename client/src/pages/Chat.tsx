@@ -2,11 +2,19 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Sparkles, Send } from "lucide-react";
 import { sendMessage } from "../api/chat";
+import type { HistoryItem } from "../api/chat";
+import { derivePageContext } from "../api/pageContext";
 import Button from "../components/ui/Button";
+
+interface ToolCall {
+  name: string;
+  isError: boolean;
+}
 
 interface Message {
   role: "user" | "assistant";
   content: string;
+  toolCalls?: ToolCall[];
 }
 
 const SUGGESTIONS = [
@@ -42,15 +50,27 @@ export default function Chat() {
   const handleSend = async (overrideText?: string) => {
     const text = (overrideText ?? input).trim();
     if (!text || loading) return;
+
+    // Derive history from current messages BEFORE any state mutation.
+    // The initial greeting is assistant-only and not a real turn, so we
+    // include all visible user/assistant turns up to this point.
+    const history: HistoryItem[] = messages
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m) => ({ role: m.role, content: m.content }));
+
     setInput("");
     setMessages((prev) => [...prev, { role: "user", content: text }]);
     setLoading(true);
     try {
-      const pageContext = { path: location.pathname };
-      const res = await sendMessage(text, pageContext);
+      const pageContext = derivePageContext(location);
+      const res = await sendMessage(text, pageContext, history);
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: res.message },
+        {
+          role: "assistant",
+          content: res.message,
+          toolCalls: res.toolCalls?.map((tc) => ({ name: tc.name, isError: tc.isError })),
+        },
       ]);
     } catch {
       setMessages((prev) => [...prev, { role: "assistant", content: "Sorry — I couldn't reach the assistant. Try again?" }]);
@@ -84,6 +104,23 @@ export default function Chat() {
               }`}
             >
               <div dangerouslySetInnerHTML={{ __html: formatBold(m.content) }} />
+              {m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {m.toolCalls.map((tc, j) => (
+                    <span
+                      key={j}
+                      className={`text-[11px] px-2 py-[2px] rounded-full border ${
+                        tc.isError
+                          ? "bg-red-50 text-red-700 border-red-200"
+                          : "bg-surface-2 text-ink-3 border-line"
+                      }`}
+                      title={tc.isError ? "Tool call failed" : "Tool call succeeded"}
+                    >
+                      🔧 {tc.name}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ))}
