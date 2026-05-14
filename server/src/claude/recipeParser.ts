@@ -1,4 +1,4 @@
-import { callClaude } from "./cli.js";
+import { callClaudeViaSdk } from "./sdkClient.js";
 import path from "path";
 
 interface ParsedRecipe {
@@ -62,9 +62,10 @@ Extract all recipe information and return ONLY valid JSON matching this exact sc
 
 For tags, include protein type, cuisine, and any relevant descriptors (quick, vegetarian, etc).`;
 
-  const raw = await callClaude(prompt, {
-    timeout: 300_000,
-    addDirs: [path.dirname(absolutePath)],
+  const raw = await callClaudeViaSdk({
+    userPrompt: prompt,
+    timeoutMs: 300_000,
+    additionalDirectories: [path.dirname(absolutePath)],
     allowedTools: ["Read"],
   });
 
