@@ -81,7 +81,7 @@ export default function Planner() {
 
   // The viewed week is the URL's source of truth. parseWeekParam normalizes
   // anything weird (mid-week dates, garbage strings, missing param) to the
-  // Monday of the relevant calendar week.
+  // Sunday of the relevant calendar week.
   const rawWeekParam = searchParams.get("week");
   const viewedWeek = parseWeekParam(rawWeekParam);
 
