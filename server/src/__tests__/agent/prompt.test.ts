@@ -39,4 +39,44 @@ describe("buildSystemPrompt", () => {
     });
     expect(out).toContain("weekStartDate: 2026-05-18");
   });
+
+  it("puts Today at the very top of the prompt", () => {
+    const out = buildSystemPrompt({
+      today: "2026-05-14",
+      currentWeekStart: "2026-05-10",
+      pageContext: {},
+    });
+    const trimmed = out.trimStart();
+    expect(trimmed.startsWith("Today: 2026-05-14")).toBe(true);
+  });
+
+  it("includes the assertive 'Trust this date' instruction", () => {
+    const out = buildSystemPrompt({
+      today: "2026-05-14",
+      currentWeekStart: "2026-05-10",
+      pageContext: {},
+    });
+    expect(out).toContain("Trust this date");
+    expect(out).toMatch(/Do NOT use your training knowledge/i);
+  });
+
+  it("declares weeks as Sunday-anchored and references Sunday resolution", () => {
+    const out = buildSystemPrompt({
+      today: "2026-05-14",
+      currentWeekStart: "2026-05-10",
+      pageContext: {},
+    });
+    expect(out).toContain("Sunday-anchored");
+    expect(out).toMatch(/resolve it to a Sunday/i);
+  });
+
+  it("never mentions Monday-anchored or Monday resolution", () => {
+    const out = buildSystemPrompt({
+      today: "2026-05-14",
+      currentWeekStart: "2026-05-10",
+      pageContext: {},
+    });
+    expect(out).not.toMatch(/Monday-anchored/);
+    expect(out).not.toMatch(/resolve it to a Monday/);
+  });
 });
