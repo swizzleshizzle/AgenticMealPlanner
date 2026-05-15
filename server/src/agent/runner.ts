@@ -47,11 +47,14 @@ function localYmd(d: Date): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function thisWeekMonday(now: Date): string {
-  const dayIndex = (now.getDay() + 6) % 7; // Mon=0, Sun=6
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - dayIndex);
-  return localYmd(monday);
+export function thisWeekSunday(now: Date): string {
+  // JS getDay(): 0 = Sunday, 1 = Monday, ..., 6 = Saturday.
+  // Sunday-anchored weeks: subtract dayIndex directly to land on Sunday.
+  // Mirrors client/src/api/plans.ts parseWeekParam math.
+  const dayIndex = now.getDay();
+  const sunday = new Date(now);
+  sunday.setDate(now.getDate() - dayIndex);
+  return localYmd(sunday);
 }
 
 // -- Runner -------------------------------------------------------------------
@@ -60,7 +63,7 @@ export async function runAgent(args: RunAgentArgs): Promise<AgentResult> {
   const { userMessage, pageContext } = args;
   const now = new Date();
   const today = localYmd(now);
-  const currentWeekStart = thisWeekMonday(now);
+  const currentWeekStart = thisWeekSunday(now);
 
   const systemPrompt = buildSystemPrompt({ today, currentWeekStart, pageContext });
   const claudeBin = resolveClaudeBinary();
