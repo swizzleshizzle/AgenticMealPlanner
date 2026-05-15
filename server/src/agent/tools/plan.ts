@@ -13,7 +13,7 @@ function dbDateYmd(d: Date): string {
 const getPlannedWeek: ToolDef = {
   name: "get_planned_week",
   description:
-    "Fetch the weekly plan for a Monday-anchored week. If weekStartDate is not given, falls back to the page context's loaded week. Returns null if no plan exists.",
+    "Fetch the weekly plan for a Sunday-anchored week. weekStartDate must be a Sunday in YYYY-MM-DD. If weekStartDate is not given, falls back to the page context's loaded week. Returns null if no plan exists.",
   schema: z.object({
     weekStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   }),
