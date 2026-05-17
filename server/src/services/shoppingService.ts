@@ -185,3 +185,58 @@ export async function getLowStockSuggestions() {
       thresholdUnit: c.ingredient.lowStockUnit,
     }));
 }
+
+export class CustomShoppingItemValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CustomShoppingItemValidationError";
+  }
+}
+
+const MAX_NAME = 200;
+const MAX_QTY_TEXT = 50;
+
+function normalizeName(raw: unknown): string {
+  if (typeof raw !== "string") {
+    throw new CustomShoppingItemValidationError("name is required");
+  }
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    throw new CustomShoppingItemValidationError("name must not be empty");
+  }
+  if (trimmed.length > MAX_NAME) {
+    throw new CustomShoppingItemValidationError(`name must be ${MAX_NAME} chars or fewer`);
+  }
+  return trimmed;
+}
+
+function normalizeQtyText(raw: unknown): string | null {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== "string") {
+    throw new CustomShoppingItemValidationError("qtyText must be a string");
+  }
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return null;
+  if (trimmed.length > MAX_QTY_TEXT) {
+    throw new CustomShoppingItemValidationError(`qtyText must be ${MAX_QTY_TEXT} chars or fewer`);
+  }
+  return trimmed;
+}
+
+export async function listCustomShoppingItems(planId: number) {
+  return prisma.customShoppingItem.findMany({
+    where: { planId },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
+export async function createCustomShoppingItem(
+  planId: number,
+  input: { name: unknown; qtyText?: unknown },
+) {
+  const name = normalizeName(input.name);
+  const qtyText = normalizeQtyText(input.qtyText);
+  return prisma.customShoppingItem.create({
+    data: { planId, name, qtyText },
+  });
+}
