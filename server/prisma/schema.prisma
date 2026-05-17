@@ -2,15 +2,18 @@ generator client {
   provider = "prisma-client-js"
 }
 
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
+
 enum MealSource {
   hello_fresh
   manual
 }
+
 
 enum PantryLocation {
   fridge
@@ -18,11 +21,13 @@ enum PantryLocation {
   pantry
 }
 
+
 enum PlanStatus {
   draft
   active
   completed
 }
+
 
 enum PlannedMealStatus {
   planned
@@ -30,6 +35,7 @@ enum PlannedMealStatus {
   skipped
   swapped
 }
+
 
 enum DayOfWeek {
   monday
@@ -41,17 +47,20 @@ enum DayOfWeek {
   sunday
 }
 
+
 enum MealSlot {
   breakfast
   lunch
   dinner
 }
 
+
 enum CookStyle {
   cook_fresh
   batch_prep
   leftovers
 }
+
 
 enum IngredientCategory {
   produce
@@ -65,11 +74,13 @@ enum IngredientCategory {
   other
 }
 
+
 enum ReceiptSource {
   paste
   photo
   pdf
 }
+
 
 model Meal {
   id          Int       @id @default(autoincrement())
@@ -118,6 +129,7 @@ model Meal {
   @@map("meals")
 }
 
+
 model Ingredient {
   id          Int                @id @default(autoincrement())
   name        String             @unique
@@ -142,6 +154,7 @@ model Ingredient {
   @@map("ingredients")
 }
 
+
 model MealIngredient {
   id           Int     @id @default(autoincrement())
   mealId       Int     @map("meal_id")
@@ -156,6 +169,7 @@ model MealIngredient {
   @@unique([mealId, ingredientId])
   @@map("meal_ingredients")
 }
+
 
 model PantryBatch {
   id              Int             @id @default(autoincrement())
@@ -180,6 +194,7 @@ model PantryBatch {
   @@map("pantry_items")
 }
 
+
 model WeeklyPlan {
   id            Int        @id @default(autoincrement())
   weekStartDate DateTime   @map("week_start_date") @db.Date
@@ -189,9 +204,11 @@ model WeeklyPlan {
 
   plannedMeals PlannedMeal[]
   shoppingItems ShoppingItem[]
+  customShoppingItems CustomShoppingItem[]
 
   @@map("weekly_plans")
 }
+
 
 model PlannedMeal {
   id        Int               @id @default(autoincrement())
@@ -211,6 +228,7 @@ model PlannedMeal {
   @@map("planned_meals")
 }
 
+
 model ShoppingItem {
   id             Int     @id @default(autoincrement())
   planId         Int     @map("plan_id")
@@ -226,6 +244,22 @@ model ShoppingItem {
   @@unique([planId, ingredientId])
   @@map("shopping_items")
 }
+
+model CustomShoppingItem {
+  id         Int        @id @default(autoincrement())
+  planId     Int        @map("plan_id")
+  name       String
+  qtyText    String?    @map("qty_text")
+  checked    Boolean    @default(false)
+  createdAt  DateTime   @default(now()) @map("created_at")
+
+  plan       WeeklyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+  @@map("custom_shopping_items")
+}
+
+
 
 model Receipt {
   id          Int           @id @default(autoincrement())
@@ -244,6 +278,7 @@ model Receipt {
 
   @@map("receipts")
 }
+
 
 model ReceiptItem {
   id             Int                 @id @default(autoincrement())
@@ -265,3 +300,4 @@ model ReceiptItem {
 
   @@map("receipt_items")
 }
+
