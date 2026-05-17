@@ -2,18 +2,15 @@ generator client {
   provider = "prisma-client-js"
 }
 
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-
 enum MealSource {
   hello_fresh
   manual
 }
-
 
 enum PantryLocation {
   fridge
@@ -21,13 +18,11 @@ enum PantryLocation {
   pantry
 }
 
-
 enum PlanStatus {
   draft
   active
   completed
 }
-
 
 enum PlannedMealStatus {
   planned
@@ -35,7 +30,6 @@ enum PlannedMealStatus {
   skipped
   swapped
 }
-
 
 enum DayOfWeek {
   monday
@@ -47,20 +41,17 @@ enum DayOfWeek {
   sunday
 }
 
-
 enum MealSlot {
   breakfast
   lunch
   dinner
 }
 
-
 enum CookStyle {
   cook_fresh
   batch_prep
   leftovers
 }
-
 
 enum IngredientCategory {
   produce
@@ -74,40 +65,38 @@ enum IngredientCategory {
   other
 }
 
-
 enum ReceiptSource {
   paste
   photo
   pdf
 }
 
-
 model Meal {
-  id          Int       @id @default(autoincrement())
-  name        String
-  description String?
-  source      MealSource @default(manual)
-  sourceUrl   String?    @map("source_url")
-  canBatch    Boolean    @default(false) @map("can_batch")
-  canFresh    Boolean    @default(true)  @map("can_fresh")
-  servings    Int        @default(2)
-  prepTime    Int?       @map("prep_time")
-  cookTime    Int?       @map("cook_time")
-  tags        String[]   @default([])
-  instructions Json      @default("[]")
-  imageUrl    String?    @map("image_url")
+  id           Int        @id @default(autoincrement())
+  name         String
+  description  String?
+  source       MealSource @default(manual)
+  sourceUrl    String?    @map("source_url")
+  canBatch     Boolean    @default(false) @map("can_batch")
+  canFresh     Boolean    @default(true) @map("can_fresh")
+  servings     Int        @default(2)
+  prepTime     Int?       @map("prep_time")
+  cookTime     Int?       @map("cook_time")
+  tags         String[]   @default([])
+  instructions Json       @default("[]")
+  imageUrl     String?    @map("image_url")
 
   // Nutrition (per original serving)
-  calories    Int?
-  proteinG    Float?     @map("protein_g")
-  carbsG      Float?     @map("carbs_g")
-  fatG        Float?     @map("fat_g")
-  fiberG      Float?     @map("fiber_g")
-  sodiumMg    Float?     @map("sodium_mg")
+  calories Int?
+  proteinG Float? @map("protein_g")
+  carbsG   Float? @map("carbs_g")
+  fatG     Float? @map("fat_g")
+  fiberG   Float? @map("fiber_g")
+  sodiumMg Float? @map("sodium_mg")
 
-  pdfPath     String?  @map("pdf_path")
-  imagePath   String?  @map("image_path")
-  imageSource String?  @map("image_source")
+  pdfPath     String? @map("pdf_path")
+  imagePath   String? @map("image_path")
+  imageSource String? @map("image_source")
 
   recipeId      Int       @map("recipe_id")
   versionNumber Int       @default(1) @map("version_number")
@@ -118,8 +107,8 @@ model Meal {
   parent     Meal?  @relation("MealSupersede", fields: [parentMealId], references: [id])
   supersedes Meal[] @relation("MealSupersede")
 
-  createdAt   DateTime   @default(now()) @map("created_at")
-  updatedAt   DateTime   @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   ingredients  MealIngredient[]
   plannedMeals PlannedMeal[]
@@ -129,22 +118,21 @@ model Meal {
   @@map("meals")
 }
 
-
 model Ingredient {
   id          Int                @id @default(autoincrement())
   name        String             @unique
   category    IngredientCategory @default(other)
   defaultUnit String             @default("count") @map("default_unit")
 
-  defaultLocation        PantryLocation? @map("default_location")
-  densityGPerMl          Float?          @map("density_g_per_ml")
-  gramsPerCount          Float?          @map("grams_per_count")
-  shelfLifeFridgeDays    Int?            @map("shelf_life_fridge_days")
-  shelfLifeFreezerDays   Int?            @map("shelf_life_freezer_days")
-  shelfLifePantryDays    Int?            @map("shelf_life_pantry_days")
-  lowStockThreshold      Float?          @map("low_stock_threshold")
-  lowStockUnit           String?         @map("low_stock_unit")
-  isOneOff               Boolean         @default(false) @map("is_one_off")
+  defaultLocation      PantryLocation? @map("default_location")
+  densityGPerMl        Float?          @map("density_g_per_ml")
+  gramsPerCount        Float?          @map("grams_per_count")
+  shelfLifeFridgeDays  Int?            @map("shelf_life_fridge_days")
+  shelfLifeFreezerDays Int?            @map("shelf_life_freezer_days")
+  shelfLifePantryDays  Int?            @map("shelf_life_pantry_days")
+  lowStockThreshold    Float?          @map("low_stock_threshold")
+  lowStockUnit         String?         @map("low_stock_unit")
+  isOneOff             Boolean         @default(false) @map("is_one_off")
 
   mealIngredients MealIngredient[]
   pantryBatches   PantryBatch[]
@@ -153,7 +141,6 @@ model Ingredient {
 
   @@map("ingredients")
 }
-
 
 model MealIngredient {
   id           Int     @id @default(autoincrement())
@@ -170,30 +157,28 @@ model MealIngredient {
   @@map("meal_ingredients")
 }
 
-
 model PantryBatch {
-  id              Int             @id @default(autoincrement())
-  ingredientId    Int             @map("ingredient_id")
-  quantity        Float
-  unit            String
-  location        PantryLocation  @default(pantry)
-  expirationDate  DateTime?       @map("expiration_date")
-  purchaseDate    DateTime?       @map("purchase_date")
-  costAtPurchase  Decimal?        @db.Decimal(10, 2) @map("cost_at_purchase")
-  tags            String[]        @default([])
-  receiptItemId   Int?            @map("receipt_item_id")
-  consumedAt      DateTime?       @map("consumed_at")
-  createdAt       DateTime        @default(now()) @map("created_at")
-  updatedAt       DateTime        @updatedAt @map("updated_at")
+  id             Int            @id @default(autoincrement())
+  ingredientId   Int            @map("ingredient_id")
+  quantity       Float
+  unit           String
+  location       PantryLocation @default(pantry)
+  expirationDate DateTime?      @map("expiration_date")
+  purchaseDate   DateTime?      @map("purchase_date")
+  costAtPurchase Decimal?       @map("cost_at_purchase") @db.Decimal(10, 2)
+  tags           String[]       @default([])
+  receiptItemId  Int?           @map("receipt_item_id")
+  consumedAt     DateTime?      @map("consumed_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
 
-  ingredient   Ingredient   @relation(fields: [ingredientId], references: [id])
-  receiptItem  ReceiptItem? @relation(fields: [receiptItemId], references: [id])
+  ingredient  Ingredient   @relation(fields: [ingredientId], references: [id])
+  receiptItem ReceiptItem? @relation(fields: [receiptItemId], references: [id])
 
   @@index([ingredientId, location, consumedAt])
   @@index([consumedAt])
   @@map("pantry_items")
 }
-
 
 model WeeklyPlan {
   id            Int        @id @default(autoincrement())
@@ -202,13 +187,12 @@ model WeeklyPlan {
   createdAt     DateTime   @default(now()) @map("created_at")
   updatedAt     DateTime   @updatedAt @map("updated_at")
 
-  plannedMeals PlannedMeal[]
-  shoppingItems ShoppingItem[]
+  plannedMeals        PlannedMeal[]
+  shoppingItems       ShoppingItem[]
   customShoppingItems CustomShoppingItem[]
 
   @@map("weekly_plans")
 }
-
 
 model PlannedMeal {
   id        Int               @id @default(autoincrement())
@@ -228,13 +212,12 @@ model PlannedMeal {
   @@map("planned_meals")
 }
 
-
 model ShoppingItem {
   id             Int     @id @default(autoincrement())
   planId         Int     @map("plan_id")
   ingredientId   Int     @map("ingredient_id")
   quantityNeeded Float   @map("quantity_needed")
-  quantityOnHand Float   @map("quantity_on_hand") @default(0)
+  quantityOnHand Float   @default(0) @map("quantity_on_hand")
   quantityToBuy  Float   @map("quantity_to_buy")
   checked        Boolean @default(false)
 
@@ -246,58 +229,54 @@ model ShoppingItem {
 }
 
 model CustomShoppingItem {
-  id         Int        @id @default(autoincrement())
-  planId     Int        @map("plan_id")
-  name       String
-  qtyText    String?    @map("qty_text")
-  checked    Boolean    @default(false)
-  createdAt  DateTime   @default(now()) @map("created_at")
+  id        Int      @id @default(autoincrement())
+  planId    Int      @map("plan_id")
+  name      String
+  qtyText   String?  @map("qty_text")
+  checked   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
 
-  plan       WeeklyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  plan WeeklyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@index([planId])
   @@map("custom_shopping_items")
 }
 
-
-
 model Receipt {
-  id          Int           @id @default(autoincrement())
-  source      ReceiptSource
-  sourcePath  String?       @map("source_path")
-  rawText     String?       @map("raw_text")
-  store       String
-  tripDate    DateTime      @map("trip_date") @db.Date
-  subtotal    Decimal?      @db.Decimal(10, 2)
-  tax         Decimal?      @db.Decimal(10, 2)
-  total       Decimal       @db.Decimal(10, 2)
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
+  id         Int           @id @default(autoincrement())
+  source     ReceiptSource
+  sourcePath String?       @map("source_path")
+  rawText    String?       @map("raw_text")
+  store      String
+  tripDate   DateTime      @map("trip_date") @db.Date
+  subtotal   Decimal?      @db.Decimal(10, 2)
+  tax        Decimal?      @db.Decimal(10, 2)
+  total      Decimal       @db.Decimal(10, 2)
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
 
   items ReceiptItem[]
 
   @@map("receipts")
 }
 
-
 model ReceiptItem {
-  id             Int                 @id @default(autoincrement())
-  receiptId      Int                 @map("receipt_id")
-  rawName        String              @map("raw_name")
-  parsedName     String              @map("parsed_name")
-  ingredientId   Int?                @map("ingredient_id")
-  quantity       Decimal             @db.Decimal(10, 3)
-  unit           String
-  price          Decimal?            @db.Decimal(10, 2)
-  kind           String              // 'food' | 'non_food' | 'unknown' — kept as string to avoid an enum migration churn
-  categoryGuess  IngredientCategory? @map("category_guess")
-  locationGuess  PantryLocation?     @map("location_guess")
-  isCommitted    Boolean             @default(true) @map("is_committed")
+  id            Int                 @id @default(autoincrement())
+  receiptId     Int                 @map("receipt_id")
+  rawName       String              @map("raw_name")
+  parsedName    String              @map("parsed_name")
+  ingredientId  Int?                @map("ingredient_id")
+  quantity      Decimal             @db.Decimal(10, 3)
+  unit          String
+  price         Decimal?            @db.Decimal(10, 2)
+  kind          String // 'food' | 'non_food' | 'unknown' — kept as string to avoid an enum migration churn
+  categoryGuess IngredientCategory? @map("category_guess")
+  locationGuess PantryLocation?     @map("location_guess")
+  isCommitted   Boolean             @default(true) @map("is_committed")
 
-  receipt       Receipt      @relation(fields: [receiptId], references: [id], onDelete: Cascade)
-  ingredient    Ingredient?  @relation(fields: [ingredientId], references: [id])
+  receipt       Receipt       @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  ingredient    Ingredient?   @relation(fields: [ingredientId], references: [id])
   pantryBatches PantryBatch[]
 
   @@map("receipt_items")
 }
-
