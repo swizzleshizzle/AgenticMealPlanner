@@ -1,5 +1,7 @@
 import { Router } from "express";
+import { Prisma } from "@prisma/client";
 import * as shoppingService from "../services/shoppingService.js";
+import { CustomShoppingItemValidationError } from "../services/shoppingService.js";
 
 const router = Router();
 
@@ -11,6 +13,62 @@ router.post("/generate/:planId", async (req, res) => {
 router.get("/low-stock", async (_req, res) => {
   const suggestions = await shoppingService.getLowStockSuggestions();
   res.json(suggestions);
+});
+
+// Custom items — list before the generic :planId route so /:planId/custom resolves correctly.
+router.get("/:planId/custom", async (req, res) => {
+  const items = await shoppingService.listCustomShoppingItems(Number(req.params.planId));
+  res.json(items);
+});
+
+router.post("/:planId/custom", async (req, res) => {
+  try {
+    const item = await shoppingService.createCustomShoppingItem(
+      Number(req.params.planId),
+      { name: req.body?.name, qtyText: req.body?.qtyText },
+    );
+    res.status(201).json(item);
+  } catch (e) {
+    if (e instanceof CustomShoppingItemValidationError) {
+      res.status(400).json({ error: e.message });
+      return;
+    }
+    throw e;
+  }
+});
+
+router.put("/custom/:id", async (req, res) => {
+  try {
+    const item = await shoppingService.updateCustomShoppingItem(Number(req.params.id), {
+      checked: req.body?.checked,
+      name: req.body?.name,
+      qtyText: req.body?.qtyText,
+    });
+    res.json(item);
+  } catch (e) {
+    if (e instanceof CustomShoppingItemValidationError) {
+      res.status(400).json({ error: e.message });
+      return;
+    }
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025") {
+      res.status(404).json({ error: "Custom shopping item not found" });
+      return;
+    }
+    throw e;
+  }
+});
+
+router.delete("/custom/:id", async (req, res) => {
+  try {
+    await shoppingService.deleteCustomShoppingItem(Number(req.params.id));
+    res.status(204).end();
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025") {
+      res.status(404).json({ error: "Custom shopping item not found" });
+      return;
+    }
+    throw e;
+  }
 });
 
 router.get("/:planId", async (req, res) => {
