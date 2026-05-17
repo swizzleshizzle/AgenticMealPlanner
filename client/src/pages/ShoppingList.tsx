@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { RefreshCw, CheckCircle2, Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { RefreshCw, CheckCircle2, Check, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import {
   formatLocalDate,
   getPlans,
@@ -14,8 +14,13 @@ import {
   getLowStockSuggestions,
   getShoppingList,
   toggleItem,
+  getCustomShoppingItems,
+  createCustomShoppingItem,
+  updateCustomShoppingItem,
+  deleteCustomShoppingItem,
   type LowStockSuggestion,
   type ShoppingItem,
+  type CustomShoppingItem,
 } from "../api/shopping";
 import Button from "../components/ui/Button";
 
@@ -40,6 +45,7 @@ function stepWeek(weekStart: string, deltaDays: number): string {
 export default function ShoppingList() {
   const [plans, setPlans] = useState<WeeklyPlan[]>([]);
   const [items, setItems] = useState<ShoppingItem[]>([]);
+  const [customItems, setCustomItems] = useState<CustomShoppingItem[]>([]);
   const [generating, setGenerating] = useState(false);
   const [lowStock, setLowStock] = useState<LowStockSuggestion[]>([]);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -76,6 +82,14 @@ export default function ShoppingList() {
       return;
     }
     getShoppingList(viewedPlan.id).then(setItems).catch(() => setItems([]));
+  }, [viewedPlan?.id]);
+
+  useEffect(() => {
+    if (!viewedPlan) {
+      setCustomItems([]);
+      return;
+    }
+    getCustomShoppingItems(viewedPlan.id).then(setCustomItems).catch(() => setCustomItems([]));
   }, [viewedPlan?.id]);
 
   const todayWeek = useMemo(() => parseWeekParam(null), []);
