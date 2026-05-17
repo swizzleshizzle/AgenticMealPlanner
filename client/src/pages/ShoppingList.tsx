@@ -115,9 +115,34 @@ export default function ShoppingList() {
     setItems(items.map((i) => i.id === id ? { ...i, checked } : i));
   };
 
+  const handleToggleCustom = async (id: number, checked: boolean) => {
+    if (isPastWeek) return;
+    const prev = customItems;
+    setCustomItems(customItems.map((i) => i.id === id ? { ...i, checked } : i));
+    try {
+      await updateCustomShoppingItem(id, { checked });
+    } catch {
+      setCustomItems(prev);
+    }
+  };
+
+  const handleDeleteCustom = async (id: number) => {
+    if (isPastWeek) return;
+    const prev = customItems;
+    setCustomItems(customItems.filter((i) => i.id !== id));
+    try {
+      await deleteCustomShoppingItem(id);
+    } catch {
+      setCustomItems(prev);
+    }
+  };
+
   const toBuy = useMemo(() => items.filter((i) => !i.checked && i.quantityToBuy > 0), [items]);
   const alreadyHave = useMemo(() => items.filter((i) => !i.checked && i.quantityToBuy === 0), [items]);
   const done = useMemo(() => items.filter((i) => i.checked), [items]);
+
+  const customToBuy = useMemo(() => customItems.filter((i) => !i.checked), [customItems]);
+  const customDone = useMemo(() => customItems.filter((i) =>  i.checked), [customItems]);
 
   const monthLabel = localMidnightFromISO(viewedWeek)
     .toLocaleDateString(undefined, { month: "long", day: "numeric" });
@@ -213,8 +238,8 @@ export default function ShoppingList() {
         </div>
       )}
 
-      {toBuy.length > 0 && (
-        <Section title="To buy" count={toBuy.length}>
+      {(toBuy.length > 0 || customToBuy.length > 0 || !isPastWeek) && viewedPlan && (
+        <Section title="To buy" count={toBuy.length + customToBuy.length}>
           {byCategory(toBuy).map(([cat, list]) => (
             <div key={cat}>
               <div className="px-4 sm:px-5 pt-2.5 pb-1 text-[11px] font-semibold text-accent-ink tracking-[0.05em] uppercase">
@@ -225,6 +250,22 @@ export default function ShoppingList() {
               ))}
             </div>
           ))}
+          <div>
+            <div className="px-4 sm:px-5 pt-2.5 pb-1 text-[11px] font-semibold text-accent-ink tracking-[0.05em] uppercase">
+              Extras
+            </div>
+            {customToBuy.map((item, i) => (
+              <CustomRow
+                key={item.id}
+                item={item}
+                onToggle={handleToggleCustom}
+                onDelete={handleDeleteCustom}
+                last={i === customToBuy.length - 1 && isPastWeek}
+                disabled={isPastWeek}
+              />
+            ))}
+            {/* Inline add row goes here in the next task. last={false} above leaves a border for it. */}
+          </div>
         </Section>
       )}
 
