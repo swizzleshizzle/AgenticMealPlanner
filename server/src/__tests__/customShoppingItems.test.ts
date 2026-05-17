@@ -11,8 +11,16 @@ import {
   CustomShoppingItemValidationError,
   generateShoppingList,
 } from "../services/shoppingService.js";
+import express from "express";
+import request from "supertest";
+import shoppingRouter from "../routes/shopping.js";
 
 const prisma = new PrismaClient();
+
+const app = express();
+app.use(express.json());
+app.use("/api/shopping", shoppingRouter);
+
 
 async function reset() {
   await prisma.customShoppingItem.deleteMany();
@@ -209,13 +217,7 @@ describe("customShoppingItem service — invariants", () => {
   });
 });
 
-import express from "express";
-import request from "supertest";
-import shoppingRouter from "../routes/shopping.js";
 
-const app = express();
-app.use(express.json());
-app.use("/api/shopping", shoppingRouter);
 
 describe("customShoppingItem routes", () => {
   beforeEach(reset);

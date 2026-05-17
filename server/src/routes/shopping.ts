@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import * as shoppingService from "../services/shoppingService.js";
-import { CustomShoppingItemValidationError } from "../services/shoppingService.js";
 
 const router = Router();
 
@@ -29,7 +28,7 @@ router.post("/:planId/custom", async (req, res) => {
     );
     res.status(201).json(item);
   } catch (e) {
-    if (e instanceof CustomShoppingItemValidationError) {
+    if (e instanceof shoppingService.CustomShoppingItemValidationError) {
       res.status(400).json({ error: e.message });
       return;
     }
@@ -46,7 +45,7 @@ router.put("/custom/:id", async (req, res) => {
     });
     res.json(item);
   } catch (e) {
-    if (e instanceof CustomShoppingItemValidationError) {
+    if (e instanceof shoppingService.CustomShoppingItemValidationError) {
       res.status(400).json({ error: e.message });
       return;
     }
