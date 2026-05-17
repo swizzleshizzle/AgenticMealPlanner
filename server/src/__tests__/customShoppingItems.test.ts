@@ -6,6 +6,8 @@ import { PrismaClient } from "@prisma/client";
 import {
   listCustomShoppingItems,
   createCustomShoppingItem,
+  updateCustomShoppingItem,
+  deleteCustomShoppingItem,
   CustomShoppingItemValidationError,
 } from "../services/shoppingService.js";
 
@@ -110,5 +112,73 @@ describe("customShoppingItem service — list + create", () => {
     await createCustomShoppingItem(plan2.id, { name: "plan2 item" });
     const rows1 = await listCustomShoppingItems(plan1.id);
     expect(rows1.map((r) => r.name)).toEqual(["plan1 item"]);
+  });
+});
+
+describe("customShoppingItem service — update + delete", () => {
+  beforeEach(reset);
+
+  it("toggles checked from false to true", async () => {
+    const plan = await makePlan();
+    const created = await createCustomShoppingItem(plan.id, { name: "soap" });
+    const updated = await updateCustomShoppingItem(created.id, { checked: true });
+    expect(updated.checked).toBe(true);
+  });
+
+  it("toggles checked from true to false", async () => {
+    const plan = await makePlan();
+    const created = await createCustomShoppingItem(plan.id, { name: "soap" });
+    await updateCustomShoppingItem(created.id, { checked: true });
+    const updated = await updateCustomShoppingItem(created.id, { checked: false });
+    expect(updated.checked).toBe(false);
+  });
+
+  it("updates name", async () => {
+    const plan = await makePlan();
+    const created = await createCustomShoppingItem(plan.id, { name: "soap" });
+    const updated = await updateCustomShoppingItem(created.id, { name: "dish soap" });
+    expect(updated.name).toBe("dish soap");
+  });
+
+  it("updates qtyText", async () => {
+    const plan = await makePlan();
+    const created = await createCustomShoppingItem(plan.id, { name: "soap" });
+    const updated = await updateCustomShoppingItem(created.id, { qtyText: "2 bars" });
+    expect(updated.qtyText).toBe("2 bars");
+  });
+
+  it("clears qtyText when passed empty string", async () => {
+    const plan = await makePlan();
+    const created = await createCustomShoppingItem(plan.id, { name: "soap", qtyText: "2 bars" });
+    const updated = await updateCustomShoppingItem(created.id, { qtyText: "" });
+    expect(updated.qtyText).toBeNull();
+  });
+
+  it("partial patch — checked only does not touch name", async () => {
+    const plan = await makePlan();
+    const created = await createCustomShoppingItem(plan.id, { name: "soap", qtyText: "2 bars" });
+    const updated = await updateCustomShoppingItem(created.id, { checked: true });
+    expect(updated.name).toBe("soap");
+    expect(updated.qtyText).toBe("2 bars");
+  });
+
+  it("rejects empty-string name on update", async () => {
+    const plan = await makePlan();
+    const created = await createCustomShoppingItem(plan.id, { name: "soap" });
+    await expect(updateCustomShoppingItem(created.id, { name: "" })).rejects.toBeInstanceOf(CustomShoppingItemValidationError);
+  });
+
+  it("rejects qtyText longer than 50 chars on update", async () => {
+    const plan = await makePlan();
+    const created = await createCustomShoppingItem(plan.id, { name: "soap" });
+    await expect(updateCustomShoppingItem(created.id, { qtyText: "x".repeat(51) })).rejects.toBeInstanceOf(CustomShoppingItemValidationError);
+  });
+
+  it("deletes a custom item", async () => {
+    const plan = await makePlan();
+    const created = await createCustomShoppingItem(plan.id, { name: "soap" });
+    await deleteCustomShoppingItem(created.id);
+    const rows = await listCustomShoppingItems(plan.id);
+    expect(rows).toEqual([]);
   });
 });
