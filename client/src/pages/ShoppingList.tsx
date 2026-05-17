@@ -186,7 +186,10 @@ export default function ShoppingList() {
               <ChevronLeft size={14} />
             </button>
             <div className="text-[12px] uppercase tracking-[0.1em] text-ink-3 select-none">
-              Week of {monthLabel}{toBuy.length > 0 ? ` · ${toBuy.length} to buy` : ""}
+              {(() => {
+                const total = toBuy.length + customToBuy.length;
+                return `Week of ${monthLabel}${total > 0 ? ` · ${total} to buy` : ""}`;
+              })()}
             </div>
             <button
               onClick={goNextWeek}
