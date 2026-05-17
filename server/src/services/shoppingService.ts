@@ -240,3 +240,29 @@ export async function createCustomShoppingItem(
     data: { planId, name, qtyText },
   });
 }
+
+export async function updateCustomShoppingItem(
+  id: number,
+  patch: { checked?: unknown; name?: unknown; qtyText?: unknown },
+) {
+  const data: { checked?: boolean; name?: string; qtyText?: string | null } = {};
+
+  if (patch.checked !== undefined) {
+    if (typeof patch.checked !== "boolean") {
+      throw new CustomShoppingItemValidationError("checked must be a boolean");
+    }
+    data.checked = patch.checked;
+  }
+  if (patch.name !== undefined) {
+    data.name = normalizeName(patch.name);
+  }
+  if (patch.qtyText !== undefined) {
+    data.qtyText = normalizeQtyText(patch.qtyText);
+  }
+
+  return prisma.customShoppingItem.update({ where: { id }, data });
+}
+
+export async function deleteCustomShoppingItem(id: number) {
+  await prisma.customShoppingItem.delete({ where: { id } });
+}
