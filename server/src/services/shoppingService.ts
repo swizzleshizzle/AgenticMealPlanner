@@ -198,7 +198,7 @@ const MAX_QTY_TEXT = 50;
 
 function normalizeName(raw: unknown): string {
   if (typeof raw !== "string") {
-    throw new CustomShoppingItemValidationError("name is required");
+    throw new CustomShoppingItemValidationError("name must be a string");
   }
   const trimmed = raw.trim();
   if (trimmed.length === 0) {

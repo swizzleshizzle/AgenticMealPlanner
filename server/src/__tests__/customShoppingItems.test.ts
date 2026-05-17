@@ -16,6 +16,11 @@ async function reset() {
   await prisma.shoppingItem.deleteMany();
   await prisma.plannedMeal.deleteMany();
   await prisma.weeklyPlan.deleteMany();
+  await prisma.pantryBatch.deleteMany();
+  await prisma.mealIngredient.deleteMany();
+  // meals can't be deleted via ORM cleanly due to a cross-branch recipe_id constraint —
+  // see cookConfirmRoute.test.ts. Future tests that create meals should use raw SQL.
+  await prisma.ingredient.deleteMany();
 }
 
 async function makePlan() {
@@ -86,8 +91,14 @@ describe("customShoppingItem service — list + create", () => {
   it("list returns items ordered by createdAt asc", async () => {
     const plan = await makePlan();
     await createCustomShoppingItem(plan.id, { name: "first" });
-    await new Promise((r) => setTimeout(r, 10));
-    await createCustomShoppingItem(plan.id, { name: "second" });
+    // Force a clearly-later createdAt so we don't depend on clock resolution.
+    await prisma.customShoppingItem.create({
+      data: {
+        planId: plan.id,
+        name: "second",
+        createdAt: new Date(Date.now() + 1000),
+      },
+    });
     const rows = await listCustomShoppingItems(plan.id);
     expect(rows.map((r) => r.name)).toEqual(["first", "second"]);
   });
