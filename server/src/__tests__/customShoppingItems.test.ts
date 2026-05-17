@@ -208,3 +208,88 @@ describe("customShoppingItem service — invariants", () => {
     expect(remaining).toEqual([]);
   });
 });
+
+import express from "express";
+import request from "supertest";
+import shoppingRouter from "../routes/shopping.js";
+
+const app = express();
+app.use(express.json());
+app.use("/api/shopping", shoppingRouter);
+
+describe("customShoppingItem routes", () => {
+  beforeEach(reset);
+
+  it("GET /api/shopping/:planId/custom returns []", async () => {
+    const plan = await makePlan();
+    const res = await request(app).get(`/api/shopping/${plan.id}/custom`);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+
+  it("POST /api/shopping/:planId/custom creates an item", async () => {
+    const plan = await makePlan();
+    const res = await request(app)
+      .post(`/api/shopping/${plan.id}/custom`)
+      .send({ name: "toilet paper", qtyText: "2 rolls" });
+    expect(res.status).toBe(201);
+    expect(res.body.name).toBe("toilet paper");
+    expect(res.body.qtyText).toBe("2 rolls");
+    expect(res.body.checked).toBe(false);
+  });
+
+  it("POST returns 400 on empty name", async () => {
+    const plan = await makePlan();
+    const res = await request(app).post(`/api/shopping/${plan.id}/custom`).send({ name: "" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/empty/);
+  });
+
+  it("POST returns 400 on missing name", async () => {
+    const plan = await makePlan();
+    const res = await request(app).post(`/api/shopping/${plan.id}/custom`).send({});
+    expect(res.status).toBe(400);
+  });
+
+  it("POST returns 400 on name >200 chars", async () => {
+    const plan = await makePlan();
+    const res = await request(app)
+      .post(`/api/shopping/${plan.id}/custom`)
+      .send({ name: "x".repeat(201) });
+    expect(res.status).toBe(400);
+  });
+
+  it("PUT /api/shopping/custom/:id toggles checked", async () => {
+    const plan = await makePlan();
+    const created = await createCustomShoppingItem(plan.id, { name: "soap" });
+    const res = await request(app).put(`/api/shopping/custom/${created.id}`).send({ checked: true });
+    expect(res.status).toBe(200);
+    expect(res.body.checked).toBe(true);
+  });
+
+  it("PUT returns 400 on invalid name", async () => {
+    const plan = await makePlan();
+    const created = await createCustomShoppingItem(plan.id, { name: "soap" });
+    const res = await request(app).put(`/api/shopping/custom/${created.id}`).send({ name: "" });
+    expect(res.status).toBe(400);
+  });
+
+  it("DELETE /api/shopping/custom/:id returns 204 and removes the row", async () => {
+    const plan = await makePlan();
+    const created = await createCustomShoppingItem(plan.id, { name: "soap" });
+    const res = await request(app).delete(`/api/shopping/custom/${created.id}`);
+    expect(res.status).toBe(204);
+    const rows = await listCustomShoppingItems(plan.id);
+    expect(rows).toEqual([]);
+  });
+
+  it("PUT /api/shopping/custom/:id on a non-existent id returns 404", async () => {
+    const res = await request(app).put(`/api/shopping/custom/999999`).send({ checked: true });
+    expect(res.status).toBe(404);
+  });
+
+  it("DELETE /api/shopping/custom/:id on a non-existent id returns 404", async () => {
+    const res = await request(app).delete(`/api/shopping/custom/999999`);
+    expect(res.status).toBe(404);
+  });
+});
