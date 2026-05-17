@@ -227,6 +227,7 @@ export default function ShoppingList() {
           isPastWeek={isPastWeek}
           generating={generating}
           onGenerate={handleGenerate}
+          compact={customItems.length > 0 || !isPastWeek}
         />
       ) : null}
 
@@ -529,15 +530,27 @@ function NoListCard({
   isPastWeek,
   generating,
   onGenerate,
+  compact,
 }: {
   isPastWeek: boolean;
   generating: boolean;
   onGenerate: () => void;
+  compact?: boolean;
 }) {
   if (isPastWeek) {
     return (
       <div className="rounded-[16px] border border-dashed border-line bg-surface-1 p-8 text-center">
         <div className="text-[14px] text-ink-2">No shopping list for this week.</div>
+      </div>
+    );
+  }
+  if (compact) {
+    return (
+      <div className="rounded-[14px] border border-dashed border-line bg-surface-1 p-4 flex items-center justify-between gap-3">
+        <div className="text-[13px] text-ink-2">No generated list yet.</div>
+        <Button variant="ghost" icon={RefreshCw} onClick={onGenerate} disabled={generating}>
+          {generating ? "Generating…" : "Generate from this week's plan"}
+        </Button>
       </div>
     );
   }
