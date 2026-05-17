@@ -48,6 +48,8 @@ export default function ShoppingList() {
   const [customItems, setCustomItems] = useState<CustomShoppingItem[]>([]);
   const [generating, setGenerating] = useState(false);
   const [lowStock, setLowStock] = useState<LowStockSuggestion[]>([]);
+  const [draftName, setDraftName] = useState("");
+  const [draftQty, setDraftQty] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
 
   // The viewed week is the URL's source of truth. parseWeekParam normalizes
@@ -134,6 +136,30 @@ export default function ShoppingList() {
       await deleteCustomShoppingItem(id);
     } catch {
       setCustomItems(prev);
+    }
+  };
+
+  const handleAddCustom = async () => {
+    const name = draftName.trim();
+    if (!name || !viewedPlan || isPastWeek) return;
+    const qtyText = draftQty.trim();
+    const optimisticId = -Date.now(); // negative id so it can't collide with real ones
+    const optimistic: CustomShoppingItem = {
+      id: optimisticId,
+      planId: viewedPlan.id,
+      name,
+      qtyText: qtyText || null,
+      checked: false,
+      createdAt: new Date().toISOString(),
+    };
+    setCustomItems([...customItems, optimistic]);
+    setDraftName("");
+    setDraftQty("");
+    try {
+      const created = await createCustomShoppingItem(viewedPlan.id, { name, qtyText: qtyText || undefined });
+      setCustomItems((prev) => prev.map((i) => i.id === optimisticId ? created : i));
+    } catch {
+      setCustomItems((prev) => prev.filter((i) => i.id !== optimisticId));
     }
   };
 
@@ -264,7 +290,38 @@ export default function ShoppingList() {
                 disabled={isPastWeek}
               />
             ))}
-            {/* Inline add row goes here in the next task. last={false} above leaves a border for it. */}
+            {!isPastWeek && (
+              <div className="grid grid-cols-[auto_1fr_auto_auto] gap-3 items-center px-4 sm:px-5 py-3">
+                <span className="w-5 h-5" aria-hidden />
+                <input
+                  type="text"
+                  value={draftName}
+                  onChange={(e) => setDraftName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleAddCustom(); }}
+                  maxLength={200}
+                  placeholder="Add an item (e.g. toilet paper)"
+                  className="text-[14px] bg-transparent outline-none text-ink-1 placeholder:text-ink-3"
+                />
+                <input
+                  type="text"
+                  value={draftQty}
+                  onChange={(e) => setDraftQty(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleAddCustom(); }}
+                  maxLength={50}
+                  placeholder="Qty"
+                  className="text-[12.5px] bg-transparent outline-none text-ink-3 placeholder:text-ink-3 text-right tabular-nums w-20"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddCustom}
+                  disabled={draftName.trim().length === 0}
+                  aria-label="Add item"
+                  className="w-6 h-6 grid place-items-center rounded-[6px] text-ink-3 hover:bg-surface-2 hover:text-ink-1 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-default"
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
+            )}
           </div>
         </Section>
       )}
