@@ -314,6 +314,62 @@ function Row({
   );
 }
 
+function CustomRow({
+  item, onToggle, onDelete, last, strikethrough, disabled,
+}: {
+  item: CustomShoppingItem;
+  onToggle: (id: number, checked: boolean) => void;
+  onDelete: (id: number) => void;
+  last: boolean;
+  strikethrough?: boolean;
+  disabled?: boolean;
+}) {
+  const Wrapper: any = disabled ? "div" : "label";
+  return (
+    <Wrapper
+      className={`group grid grid-cols-[auto_1fr_auto_auto] gap-3 items-center px-4 sm:px-5 py-3 ${disabled ? "cursor-not-allowed opacity-80" : "cursor-pointer"} ${last ? "" : "border-b border-line-soft"}`}
+    >
+      <span
+        className="w-5 h-5 rounded-[6px] grid place-items-center"
+        style={{
+          border: `1.5px solid ${item.checked ? "var(--accent)" : "var(--ink-3)"}`,
+          background: item.checked ? "var(--accent)" : "transparent",
+          color: "var(--accent-on)",
+        }}
+      >
+        {item.checked && <Check size={13} strokeWidth={2.5} />}
+      </span>
+      {!disabled && (
+        <input
+          type="checkbox"
+          checked={item.checked}
+          onChange={() => onToggle(item.id, !item.checked)}
+          className="hidden"
+        />
+      )}
+      <div
+        className="text-[14px] text-ink-1"
+        style={{ textDecoration: strikethrough ? "line-through" : "none" }}
+      >
+        {item.name}
+      </div>
+      <div className="text-[12.5px] text-ink-3 tabular-nums">
+        {item.qtyText ?? ""}
+      </div>
+      {!disabled && !strikethrough ? (
+        <button
+          type="button"
+          aria-label={`Delete ${item.name}`}
+          onClick={(e) => { e.preventDefault(); onDelete(item.id); }}
+          className="opacity-0 group-hover:opacity-100 focus:opacity-100 w-6 h-6 grid place-items-center rounded-[6px] text-ink-3 hover:bg-surface-2 hover:text-ink-1 transition-opacity"
+        >
+          <X size={13} />
+        </button>
+      ) : <span />}
+    </Wrapper>
+  );
+}
+
 function byCategory(list: ShoppingItem[]): [string, ShoppingItem[]][] {
   const g: Record<string, ShoppingItem[]> = {};
   for (const i of list) {
