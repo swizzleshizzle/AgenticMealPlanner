@@ -337,13 +337,31 @@ export default function ShoppingList() {
         </div>
       )}
 
-      {done.length > 0 && (
+      {(done.length + customDone.length) > 0 && (
         <div className="opacity-65 bg-surface-1 border border-line rounded-[14px] overflow-hidden">
           <div className="px-4 sm:px-5 py-3 text-[11px] text-ink-3 uppercase tracking-[0.08em]">
-            Done · {done.length}
+            Done · {done.length + customDone.length}
           </div>
           {done.map((item, i) => (
-            <Row key={item.id} item={item} onToggle={handleToggle} last={i === done.length - 1} strikethrough disabled={isPastWeek} />
+            <Row
+              key={`g-${item.id}`}
+              item={item}
+              onToggle={handleToggle}
+              last={i === done.length - 1 && customDone.length === 0}
+              strikethrough
+              disabled={isPastWeek}
+            />
+          ))}
+          {customDone.map((item, i) => (
+            <CustomRow
+              key={`c-${item.id}`}
+              item={item}
+              onToggle={handleToggleCustom}
+              onDelete={handleDeleteCustom}
+              last={i === customDone.length - 1}
+              strikethrough
+              disabled={isPastWeek}
+            />
           ))}
         </div>
       )}
