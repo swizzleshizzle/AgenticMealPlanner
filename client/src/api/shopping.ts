@@ -27,3 +27,36 @@ export const toggleItem = (id: number, checked: boolean) =>
   apiFetch<ShoppingItem>(`/shopping/item/${id}`, { method: "PUT", body: JSON.stringify({ checked }) });
 export const getLowStockSuggestions = () =>
   apiFetch<LowStockSuggestion[]>("/shopping/low-stock");
+
+export interface CustomShoppingItem {
+  id: number;
+  planId: number;
+  name: string;
+  qtyText: string | null;
+  checked: boolean;
+  createdAt: string;
+}
+
+export const getCustomShoppingItems = (planId: number) =>
+  apiFetch<CustomShoppingItem[]>(`/shopping/${planId}/custom`);
+
+export const createCustomShoppingItem = (
+  planId: number,
+  input: { name: string; qtyText?: string },
+) =>
+  apiFetch<CustomShoppingItem>(`/shopping/${planId}/custom`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+export const updateCustomShoppingItem = (
+  id: number,
+  patch: { checked?: boolean; name?: string; qtyText?: string },
+) =>
+  apiFetch<CustomShoppingItem>(`/shopping/custom/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(patch),
+  });
+
+export const deleteCustomShoppingItem = (id: number) =>
+  apiFetch<void>(`/shopping/custom/${id}`, { method: "DELETE" });
