@@ -9,6 +9,7 @@ import {
   updateCustomShoppingItem,
   deleteCustomShoppingItem,
   CustomShoppingItemValidationError,
+  generateShoppingList,
 } from "../services/shoppingService.js";
 
 const prisma = new PrismaClient();
@@ -180,5 +181,30 @@ describe("customShoppingItem service — update + delete", () => {
     await deleteCustomShoppingItem(created.id);
     const rows = await listCustomShoppingItems(plan.id);
     expect(rows).toEqual([]);
+  });
+});
+
+describe("customShoppingItem service — invariants", () => {
+  beforeEach(reset);
+
+  it("generateShoppingList does NOT delete custom items", async () => {
+    const plan = await makePlan();
+    await createCustomShoppingItem(plan.id, { name: "toilet paper", qtyText: "2 rolls" });
+    await createCustomShoppingItem(plan.id, { name: "paper towels" });
+
+    // Run regenerate. With no planned meals it returns [] but the side effect
+    // we care about is shoppingItem.deleteMany — which must NOT touch our table.
+    await generateShoppingList(plan.id);
+
+    const rows = await listCustomShoppingItems(plan.id);
+    expect(rows.map((r) => r.name).sort()).toEqual(["paper towels", "toilet paper"]);
+  });
+
+  it("cascade-deleting a plan removes its custom items", async () => {
+    const plan = await makePlan();
+    await createCustomShoppingItem(plan.id, { name: "soap" });
+    await prisma.weeklyPlan.delete({ where: { id: plan.id } });
+    const remaining = await prisma.customShoppingItem.findMany({ where: { planId: plan.id } });
+    expect(remaining).toEqual([]);
   });
 });
