@@ -191,6 +191,7 @@ model WeeklyPlan {
   shoppingItems       ShoppingItem[]
   customShoppingItems CustomShoppingItem[]
 
+  @@unique([weekStartDate])
   @@map("weekly_plans")
 }
 

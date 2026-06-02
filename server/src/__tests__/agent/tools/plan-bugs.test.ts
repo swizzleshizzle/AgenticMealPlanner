@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 
 const mockPrismaInstance = {
   $transaction: vi.fn(),
-  plannedMeal: { findUnique: vi.fn(), update: vi.fn() },
+  plannedMeal: { findUnique: vi.fn(), update: vi.fn(), create: vi.fn() },
   weeklyPlan: { findFirst: vi.fn(), create: vi.fn(), upsert: vi.fn() },
 };
 
@@ -62,5 +62,36 @@ describe("mark_meal_cooked idempotency", () => {
 
     await expect(markMealCooked.handler({ plannedMealId: 1 }, { pageContext: {} })).rejects.toThrow(/already cooked/);
     expect(tx.plannedMeal.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("add_planned_meal upsert", () => {
+  it("uses upsert (not findFirst+create) on weeklyPlan", async () => {
+    const { planTools } = await import("../../../agent/tools/plan.js");
+    const addPlannedMeal = planTools.find((t) => t.name === "add_planned_meal")!;
+
+    // Use the shared mock instance (same object the handler imports via new PrismaClient())
+    mockPrismaInstance.weeklyPlan.upsert.mockResolvedValue({ id: 99, weekStartDate: new Date("2026-05-10") });
+    mockPrismaInstance.weeklyPlan.findFirst.mockClear();
+    mockPrismaInstance.plannedMeal.create.mockResolvedValue({ id: 1 });
+
+    await addPlannedMeal.handler(
+      {
+        weekStartDate: "2026-05-10",
+        mealId: 1,
+        day: "monday",
+        mealSlot: "dinner",
+        servings: 2,
+      },
+      { pageContext: {} },
+    );
+
+    expect(mockPrismaInstance.weeklyPlan.upsert).toHaveBeenCalledOnce();
+    expect(mockPrismaInstance.weeklyPlan.findFirst).not.toHaveBeenCalled();
+    expect(mockPrismaInstance.weeklyPlan.upsert).toHaveBeenCalledWith({
+      where: { weekStartDate: new Date("2026-05-10") },
+      update: {},
+      create: { weekStartDate: new Date("2026-05-10"), status: "active" },
+    });
   });
 });

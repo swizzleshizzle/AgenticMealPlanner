@@ -98,15 +98,11 @@ const addPlannedMeal: ToolDef = {
     cookStyle: CookStyleEnum.optional(),
   }),
   handler: async (input) => {
-    // weekStartDate has no @unique constraint on WeeklyPlan, so use findFirst + create.
-    const existing = await prisma.weeklyPlan.findFirst({
+    const plan = await prisma.weeklyPlan.upsert({
       where: { weekStartDate: new Date(input.weekStartDate) },
+      update: {},
+      create: { weekStartDate: new Date(input.weekStartDate), status: "active" },
     });
-    const plan =
-      existing ??
-      (await prisma.weeklyPlan.create({
-        data: { weekStartDate: new Date(input.weekStartDate), status: "active" },
-      }));
     const plannedMeal = await prisma.plannedMeal.create({
       data: {
         planId: plan.id,
