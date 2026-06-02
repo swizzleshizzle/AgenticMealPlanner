@@ -88,12 +88,12 @@ const CookStyleEnum = z.enum(["cook_fresh", "batch_prep", "leftovers"]);
 const addPlannedMeal: ToolDef = {
   name: "add_planned_meal",
   description:
-    "Add a meal to the week's plan. Creates the WeeklyPlan if one doesn't exist for weekStartDate. day is lowercase weekday (monday..sunday). mealSlot is 'breakfast' | 'lunch' | 'dinner' | 'snack'.",
+    "Add a meal to the week's plan. Creates the WeeklyPlan if one doesn't exist for weekStartDate. day is lowercase weekday (monday..sunday). mealSlot is 'breakfast' | 'lunch' | 'dinner'.",
   schema: z.object({
     weekStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     mealId: z.number().int(),
     day: z.enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]),
-    mealSlot: z.enum(["breakfast", "lunch", "dinner", "snack"]),
+    mealSlot: z.enum(["breakfast", "lunch", "dinner"]),
     servings: z.number().positive().default(2),
     cookStyle: CookStyleEnum.optional(),
   }),
@@ -145,6 +145,9 @@ const markMealCooked: ToolDef = {
         include: { meal: true },
       });
       if (!pm) throw new Error(`PlannedMeal ${input.plannedMealId} not found`);
+      if (pm.status === "cooked") {
+        throw new Error(`PlannedMeal ${input.plannedMealId} is already cooked; deduction would be double-applied`);
+      }
       // Mirror the cook-confirm route: multiplier is ratio of planned servings to meal's default servings.
       const multiplier = pm.servings / pm.meal.servings;
       const deduction = await deductIngredientsForMeal(pm.mealId, multiplier, input.overrides, tx);
