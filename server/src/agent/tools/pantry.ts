@@ -1,9 +1,8 @@
 import { z } from "zod";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../../lib/prisma.js";
 import { createBatch } from "../../services/pantryBatchService.js";
 import type { ToolDef } from "../types.js";
 
-const prisma = new PrismaClient();
 
 const LocationEnum = z.enum(["fridge", "freezer", "pantry"]);
 

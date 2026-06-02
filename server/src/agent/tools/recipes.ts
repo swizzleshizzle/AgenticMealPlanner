@@ -1,9 +1,8 @@
 import { z } from "zod";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../../lib/prisma.js";
 import { supersedeMeal, archiveMeal as svcArchiveMeal } from "../../services/mealService.js";
 import type { ToolDef } from "../types.js";
 
-const prisma = new PrismaClient();
 
 const getMeals: ToolDef = {
   name: "get_meals",

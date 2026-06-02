@@ -1,8 +1,7 @@
 import { z } from "zod";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../../lib/prisma.js";
 import type { ToolDef } from "../types.js";
 
-const prisma = new PrismaClient();
 
 const getRecentReceipts: ToolDef = {
   name: "get_recent_receipts",

@@ -1,10 +1,9 @@
 import { z } from "zod";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../../lib/prisma.js";
 import type { ToolDef } from "../types.js";
 import { updatePlannedMeal } from "../../services/plannerService.js";
 import { deductIngredientsForMeal } from "../../services/pantryService.js";
 
-const prisma = new PrismaClient();
 
 function dbDateYmd(d: Date): string {
   return d.toISOString().slice(0, 10);
