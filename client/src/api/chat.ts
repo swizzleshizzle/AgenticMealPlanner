@@ -26,6 +26,11 @@ export async function sendMessage(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message, pageContext, history }),
   });
-  if (!res.ok) throw new Error("Chat failed");
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}) as { error?: string; details?: string });
+    const error = body.error ?? "Chat failed";
+    const details = body.details ?? `HTTP ${res.status}`;
+    throw new Error(`${error}: ${details}`);
+  }
   return res.json();
 }

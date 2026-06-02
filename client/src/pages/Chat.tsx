@@ -15,6 +15,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   toolCalls?: ToolCall[];
+  isGreeting?: boolean;
 }
 
 const SUGGESTIONS = [
@@ -39,6 +40,7 @@ export default function Chat() {
     {
       role: "assistant",
       content: "Hey! I'm your meal planning sidekick. Ask me to swap meals, scale portions, or check what's in the fridge.",
+      isGreeting: true,
     },
   ]);
   const [input, setInput] = useState("");
@@ -52,10 +54,9 @@ export default function Chat() {
     if (!text || loading) return;
 
     // Derive history from current messages BEFORE any state mutation.
-    // The initial greeting is assistant-only and not a real turn, so we
-    // include all visible user/assistant turns up to this point.
+    // Exclude the initial greeting (it's not a real model turn).
     const history: HistoryItem[] = messages
-      .filter((m) => m.role === "user" || m.role === "assistant")
+      .filter((m) => !m.isGreeting)
       .map((m) => ({ role: m.role, content: m.content }));
 
     setInput("");
