@@ -136,9 +136,11 @@ export async function runAgent(args: RunAgentArgs): Promise<AgentResult> {
   });
 
   let message = "";
+  let sawResult = false;
 
   for await (const msg of queryIterator) {
     if (msg.type === "result") {
+      sawResult = true;
       if (msg.subtype === "success") {
         message = (msg as any).result ?? "";
       } else {
@@ -154,5 +156,8 @@ export async function runAgent(args: RunAgentArgs): Promise<AgentResult> {
     // for this minimal v1 -- we only need the final result text.
   }
 
+  if (!sawResult) {
+    throw new Error("Agent did not return a result message");
+  }
   return { message, toolCalls };
 }
