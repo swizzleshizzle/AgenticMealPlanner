@@ -18,7 +18,7 @@ const getMeals: ToolDef = {
     const where: any = {};
     if (!input.includeArchived) where.archivedAt = null;
     if (!input.includeVariants) where.isDefault = true;
-    if (input.q) where.name = { contains: input.q.toLowerCase() };
+    if (input.q) where.name = { contains: input.q, mode: "insensitive" };
     const meals = await prisma.meal.findMany({
       where,
       take: input.limit ?? 50,

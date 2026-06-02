@@ -22,7 +22,7 @@ const getPantry: ToolDef = {
     if (input.category || input.q) {
       where.ingredient = {};
       if (input.category) where.ingredient.category = input.category;
-      if (input.q) where.ingredient.name = { contains: input.q.toLowerCase() };
+      if (input.q) where.ingredient.name = { contains: input.q, mode: "insensitive" };
     }
     if (input.expiringWithinDays) {
       const cutoff = new Date();
