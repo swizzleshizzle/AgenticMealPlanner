@@ -19,3 +19,10 @@ export interface AgentResult {
   message: string;
   toolCalls: { name: string; input: unknown; output: unknown; isError: boolean }[];
 }
+
+export type StreamEvent =
+  | { type: "tool_call_start"; name: string }
+  | { type: "tool_call_end"; name: string; isError: boolean }
+  | { type: "text_delta"; delta: string }
+  | { type: "done"; message: string; toolCalls: AgentResult["toolCalls"] }
+  | { type: "error"; error: string };
