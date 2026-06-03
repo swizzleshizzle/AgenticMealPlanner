@@ -5,6 +5,8 @@ import { sendMessage } from "../api/chat";
 import type { HistoryItem } from "../api/chat";
 import { derivePageContext } from "../api/pageContext";
 import Button from "./ui/Button";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface ToolCall { name: string; isError: boolean; }
 interface Message {
@@ -23,14 +25,6 @@ const SUGGESTIONS = [
 
 const GREETING_MESSAGE = "Hey! I'm your meal planning sidekick. Ask me to swap meals, scale portions, or check what's in the fridge.";
 
-function formatBold(text: string): string {
-  // Tiny safe formatter: only **bold** spans; everything else escaped
-  const escaped = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-  return escaped.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-}
 
 export default function ChatPanel() {
   const location = useLocation();
@@ -138,7 +132,16 @@ export default function ChatPanel() {
                   : "bg-surface-1 text-ink-1 border border-line shadow-[var(--shadow-card)]"
               }`}
             >
-              <div dangerouslySetInnerHTML={{ __html: formatBold(m.content) }} />
+              <div className="text-[14px] leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_code]:bg-surface-2 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[12px] [&_a]:underline [&_p]:my-1 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_pre]:bg-surface-2 [&_pre]:rounded [&_pre]:p-3 [&_pre]:overflow-x-auto [&_pre]:text-[12px] [&_pre]:my-2 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-[12px] [&_blockquote]:border-l-2 [&_blockquote]:border-line [&_blockquote]:pl-3 [&_blockquote]:text-ink-3 [&_blockquote]:my-1 [&_h1]:text-[18px] [&_h1]:font-semibold [&_h1]:my-2 [&_h2]:text-[16px] [&_h2]:font-semibold [&_h2]:my-1.5 [&_h3]:font-semibold [&_h3]:my-1 [&_table]:w-full [&_table]:text-[13px] [&_table]:my-2 [&_th]:text-left [&_th]:border-b [&_th]:border-line [&_th]:pb-1 [&_th]:pr-3 [&_td]:py-0.5 [&_td]:pr-3 [&_strong]:font-semibold">
+                <Markdown remarkPlugins={[remarkGfm]} disallowedElements={["script", "iframe", "img"]}
+                  unwrapDisallowed
+                  components={{
+                    a: ({ node, ...props }: any) => <a {...props} target="_blank" rel="noopener noreferrer" />,
+                  }}
+                >
+                  {m.content}
+                </Markdown>
+              </div>
               {m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
                   {m.toolCalls.map((tc, j) => (
