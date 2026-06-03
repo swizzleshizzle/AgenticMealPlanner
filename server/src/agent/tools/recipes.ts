@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma } from "../../lib/prisma.js";
-import { supersedeMeal, archiveMeal as svcArchiveMeal } from "../../services/mealService.js";
+import { supersedeMeal, archiveMeal as svcArchiveMeal, unarchiveMeal as svcUnarchiveMeal } from "../../services/mealService.js";
 import type { ToolDef } from "../types.js";
 
 
@@ -79,4 +79,16 @@ const archiveMealTool: ToolDef = {
   },
 };
 
-export const recipeTools: ToolDef[] = [getMeals, getMealDetail, createVersionTool, archiveMealTool];
+
+const unarchiveMealTool: ToolDef = {
+  name: "unarchive_meal",
+  description:
+    "Un-archive a meal (makes it visible again in default planning views). Counterpart to archive_meal.",
+  schema: z.object({ mealId: z.number().int() }),
+  handler: async (input) => {
+    const meal = await svcUnarchiveMeal(input.mealId);
+    return { meal };
+  },
+};
+
+export const recipeTools: ToolDef[] = [getMeals, getMealDetail, createVersionTool, archiveMealTool, unarchiveMealTool];

@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { prisma } from "../../lib/prisma.js";
 import type { ToolDef } from "../types.js";
-import { updatePlannedMeal } from "../../services/plannerService.js";
+import { updatePlannedMeal, removePlannedMeal, updatePlan } from "../../services/plannerService.js";
 import { deductIngredientsForMeal } from "../../services/pantryService.js";
+import { generateWeeklyPlan } from "../../claude/mealPlanner.js";
 
 
 function dbDateYmd(d: Date): string {
@@ -155,6 +156,65 @@ const markMealCooked: ToolDef = {
   },
 };
 
+
+const removePlannedMealTool: ToolDef = {
+  name: "remove_planned_meal",
+  description: "Delete a planned-meal slot from the week's plan. Use this when the user wants to clear a slot entirely (not skip it).",
+  schema: z.object({ plannedMealId: z.number().int() }),
+  handler: async (input) => {
+    await removePlannedMeal(input.plannedMealId);
+    return { deletedId: input.plannedMealId };
+  },
+};
+
+
+const PlanStatusEnum = z.enum(["draft", "active", "completed"]);
+
+const setPlanStatusTool: ToolDef = {
+  name: "set_plan_status",
+  description:
+    "Change a weekly plan's status. 'draft' = still being filled in, 'active' = current/in-progress, 'completed' = done. Use this when the user wants to mark a week as finished, or revert a published plan to a draft.",
+  schema: z.object({
+    planId: z.number().int(),
+    status: PlanStatusEnum,
+  }),
+  handler: async (input) => {
+    const plan = await updatePlan(input.planId, { status: input.status });
+    return {
+      plan: {
+        id: plan.id,
+        weekStartDate: dbDateYmd(plan.weekStartDate),
+        status: plan.status,
+      },
+    };
+  },
+};
+
+const generateFullWeekTool: ToolDef = {
+  name: "generate_full_week",
+  description:
+    "Generate an AI-suggested full week of meals for the given Sunday-anchored week. Creates the WeeklyPlan if missing. Returns the populated plan with all planned meals. Confirm with the user before invoking — this can fill 14+ slots and is hard to undo.",
+  schema: z.object({
+    weekStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  }),
+  handler: async (input) => {
+    const plan = await prisma.weeklyPlan.upsert({
+      where: { weekStartDate: new Date(input.weekStartDate) },
+      update: {},
+      create: { weekStartDate: new Date(input.weekStartDate), status: "active" },
+    });
+    const generated = await generateWeeklyPlan(plan.id);
+    return {
+      plan: {
+        id: generated.id,
+        weekStartDate: dbDateYmd(generated.weekStartDate),
+        status: generated.status,
+        mealCount: generated.plannedMeals?.length ?? 0,
+      },
+    };
+  },
+};
+
 export const planTools: ToolDef[] = [
   getPlannedWeek,
   addPlannedMeal,
@@ -162,4 +222,7 @@ export const planTools: ToolDef[] = [
   skipMeal,
   scaleServings,
   markMealCooked,
+  removePlannedMealTool,
+  setPlanStatusTool,
+  generateFullWeekTool,
 ];
