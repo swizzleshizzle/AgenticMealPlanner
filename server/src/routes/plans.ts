@@ -120,43 +120,8 @@ router.post("/:id/generate", async (req, res) => {
     return;
   }
 
-  const allMeals = await prisma.meal.findMany({
-    where: { isDefault: true, archivedAt: null },
-    select: { id: true, name: true, canBatch: true, canFresh: true, tags: true, servings: true, calories: true },
-  });
-
-  const pantryItems = await prisma.pantryBatch.findMany({
-    where: { consumedAt: null },
-    include: { ingredient: true },
-  });
-  const pantry = pantryItems.map((p) => ({
-    name: p.ingredient.name,
-    quantity: p.quantity,
-    unit: p.unit,
-  }));
-
-  const twoWeeksAgo = new Date();
-  twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-  const recentPlans = await prisma.plannedMeal.findMany({
-    where: { plan: { weekStartDate: { gte: twoWeeksAgo } } },
-    select: { mealId: true },
-  });
-  const recentMealIds = [...new Set(recentPlans.map((p) => p.mealId))];
-
   try {
-    const suggested = await generateWeeklyPlan(allMeals, pantry, recentMealIds);
-
-    for (const meal of suggested.meals) {
-      await plannerService.addPlannedMeal(planId, {
-        mealId: meal.mealId,
-        day: meal.day,
-        mealSlot: meal.mealSlot,
-        servings: meal.servings,
-        cookStyle: meal.cookStyle,
-      });
-    }
-
-    const updatedPlan = await plannerService.getPlanById(planId);
+    const updatedPlan = await generateWeeklyPlan(planId);
     res.json(updatedPlan);
   } catch (err: any) {
     res.status(500).json({ error: "Failed to generate plan", details: err.message });

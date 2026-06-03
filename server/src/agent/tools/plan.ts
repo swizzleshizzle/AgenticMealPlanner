@@ -3,6 +3,7 @@ import { prisma } from "../../lib/prisma.js";
 import type { ToolDef } from "../types.js";
 import { updatePlannedMeal, removePlannedMeal, updatePlan } from "../../services/plannerService.js";
 import { deductIngredientsForMeal } from "../../services/pantryService.js";
+import { generateWeeklyPlan } from "../../claude/mealPlanner.js";
 
 
 function dbDateYmd(d: Date): string {
@@ -189,6 +190,31 @@ const setPlanStatusTool: ToolDef = {
   },
 };
 
+const generateFullWeekTool: ToolDef = {
+  name: "generate_full_week",
+  description:
+    "Generate an AI-suggested full week of meals for the given Sunday-anchored week. Creates the WeeklyPlan if missing. Returns the populated plan with all planned meals. Confirm with the user before invoking — this can fill 14+ slots and is hard to undo.",
+  schema: z.object({
+    weekStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  }),
+  handler: async (input) => {
+    const plan = await prisma.weeklyPlan.upsert({
+      where: { weekStartDate: new Date(input.weekStartDate) },
+      update: {},
+      create: { weekStartDate: new Date(input.weekStartDate), status: "active" },
+    });
+    const generated = await generateWeeklyPlan(plan.id);
+    return {
+      plan: {
+        id: generated.id,
+        weekStartDate: dbDateYmd(generated.weekStartDate),
+        status: generated.status,
+        mealCount: generated.plannedMeals?.length ?? 0,
+      },
+    };
+  },
+};
+
 export const planTools: ToolDef[] = [
   getPlannedWeek,
   addPlannedMeal,
@@ -198,4 +224,5 @@ export const planTools: ToolDef[] = [
   markMealCooked,
   removePlannedMealTool,
   setPlanStatusTool,
+  generateFullWeekTool,
 ];
