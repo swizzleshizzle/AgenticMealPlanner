@@ -29,7 +29,7 @@ import { z } from "zod";
 import { buildSystemPrompt } from "./prompt.js";
 import { dispatchToolCall } from "./registry.js";
 import { allTools } from "./tools/index.js";
-import type { PageContext, AgentResult } from "./types.js";
+import type { PageContext, AgentResult, StreamEvent } from "./types.js";
 import { resolveClaudeBinary } from "../claude/binaryResolver.js";
 
 export interface RunAgentArgs {
@@ -57,9 +57,9 @@ export function thisWeekSunday(now: Date): string {
   return localYmd(sunday);
 }
 
-// -- Runner -------------------------------------------------------------------
+// -- Streaming generator ------------------------------------------------------
 
-export async function runAgent(args: RunAgentArgs): Promise<AgentResult> {
+export async function* runAgentStream(args: RunAgentArgs): AsyncGenerator<StreamEvent> {
   const { userMessage, pageContext } = args;
   const now = new Date();
   const today = localYmd(now);
@@ -137,9 +137,33 @@ export async function runAgent(args: RunAgentArgs): Promise<AgentResult> {
 
   let message = "";
   let sawResult = false;
+  let lastEmittedLength = 0;
 
   for await (const msg of queryIterator) {
-    if (msg.type === "result") {
+    if ((msg as any).type === "assistant") {
+      const content = (msg as any).message?.content;
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block.type === "text" && typeof block.text === "string") {
+            const delta = block.text.slice(lastEmittedLength);
+            if (delta) {
+              lastEmittedLength = block.text.length;
+              yield { type: "text_delta", delta };
+            }
+          } else if (block.type === "tool_use") {
+            yield { type: "tool_call_start", name: block.name.split("__").pop() ?? block.name };
+          } else if (block.type === "tool_result") {
+            // NOTE: tool_result blocks arrive in SDK "user" messages, not "assistant"
+            // messages, so this branch effectively never fires today. The authoritative
+            // tool-call state (with isError) is delivered on the "done" event and the
+            // client reconciles chip state there.
+            const isError = block.is_error === true;
+            const last = toolCalls[toolCalls.length - 1];
+            yield { type: "tool_call_end", name: last?.name ?? "unknown", isError };
+          }
+        }
+      }
+    } else if (msg.type === "result") {
       sawResult = true;
       if (msg.subtype === "success") {
         message = (msg as any).result ?? "";
@@ -152,12 +176,26 @@ export async function runAgent(args: RunAgentArgs): Promise<AgentResult> {
       }
       break; // result is always last
     }
-    // Other message types (assistant, system, status, etc.) are ignored
-    // for this minimal v1 -- we only need the final result text.
   }
 
   if (!sawResult) {
-    throw new Error("Agent did not return a result message");
+    yield { type: "error", error: "Agent did not return a result message" };
+    return;
   }
-  return { message, toolCalls };
+
+  yield { type: "done", message, toolCalls };
+}
+
+// -- Buffered runner (delegates to stream) ------------------------------------
+
+export async function runAgent(args: RunAgentArgs): Promise<AgentResult> {
+  for await (const ev of runAgentStream(args)) {
+    if (ev.type === "done") {
+      return { message: ev.message, toolCalls: ev.toolCalls };
+    }
+    if (ev.type === "error") {
+      throw new Error(ev.error);
+    }
+  }
+  throw new Error("Agent stream ended without a done event");
 }
