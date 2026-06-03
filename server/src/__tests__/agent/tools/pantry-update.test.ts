@@ -18,3 +18,16 @@ describe("update_pantry_batch", () => {
     expect(updateBatch).toHaveBeenCalledWith(12, { quantity: 3, unit: "cup" });
   });
 });
+
+describe("consume_pantry_batch", () => {
+  it("calls softDeleteBatch and returns the batch with consumedAt set", async () => {
+    const { softDeleteBatch } = await import("../../../services/pantryBatchService.js");
+    (softDeleteBatch as any).mockResolvedValueOnce({ id: 12, consumedAt: new Date("2026-05-14") });
+    const { pantryTools } = await import("../../../agent/tools/pantry.js");
+    const tool = pantryTools.find((t) => t.name === "consume_pantry_batch")!;
+    expect(tool).toBeDefined();
+    const out = await tool.handler({ batchId: 12 }, { pageContext: {} });
+    expect((out as any).batch.consumedAt).toBeDefined();
+    expect(softDeleteBatch).toHaveBeenCalledWith(12);
+  });
+});
