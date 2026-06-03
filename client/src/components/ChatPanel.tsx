@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Sparkles, Send } from "lucide-react";
-import { sendMessage } from "../api/chat";
-import type { HistoryItem } from "../api/chat";
+import { sendMessageStream } from "../api/chat";
+import type { HistoryItem, StreamEvent } from "../api/chat";
 import { derivePageContext } from "../api/pageContext";
 import Button from "./ui/Button";
 import Markdown from "react-markdown";
@@ -10,10 +10,17 @@ import remarkGfm from "remark-gfm";
 
 interface ToolCall { name: string; isError: boolean; }
 interface Message {
+  id: string;
   role: "user" | "assistant";
   content: string;
   toolCalls?: ToolCall[];
   isGreeting?: boolean;
+}
+
+function newId(): string {
+  return (typeof crypto !== "undefined" && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : `m_${Math.random().toString(36).slice(2)}_${performance.now()}`;
 }
 
 const SUGGESTIONS = [
@@ -24,12 +31,14 @@ const SUGGESTIONS = [
 ];
 
 const GREETING_MESSAGE = "Hey! I'm your meal planning sidekick. Ask me to swap meals, scale portions, or check what's in the fridge.";
+const GREETING_ID = "greeting";
 
 
 export default function ChatPanel() {
   const location = useLocation();
   const [messages, setMessages] = useState<Message[]>([
     {
+      id: GREETING_ID,
       role: "assistant",
       content: GREETING_MESSAGE,
       isGreeting: true,
@@ -63,22 +72,36 @@ export default function ChatPanel() {
       .map((m) => ({ role: m.role, content: m.content }));
 
     setInput("");
-    setMessages((prev) => [...prev, { role: "user", content: text }]);
+    setMessages((prev) => [...prev, { id: newId(), role: "user", content: text }]);
     setLoading(true);
     try {
       const pageContext = derivePageContext(location);
-      const res = await sendMessage(text, pageContext, history, controller.signal);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: res.message,
-          toolCalls: res.toolCalls?.map((tc) => ({ name: tc.name, isError: tc.isError })),
-        },
-      ]);
+      const draftId = newId();
+      setMessages((prev) => [...prev, { id: draftId, role: "assistant", content: "", toolCalls: [] }]);
+
+      for await (const ev of sendMessageStream(text, pageContext, history, controller.signal)) {
+        if (ev.type === "text_delta") {
+          setMessages((prev) => prev.map((m) => m.id === draftId ? { ...m, content: m.content + ev.delta } : m));
+        } else if (ev.type === "tool_call_start") {
+          setMessages((prev) => prev.map((m) => m.id === draftId ? { ...m, toolCalls: [...(m.toolCalls ?? []), { name: ev.name, isError: false }] } : m));
+        } else if (ev.type === "tool_call_end") {
+          setMessages((prev) => prev.map((m) => {
+            if (m.id !== draftId) return m;
+            const tcs = [...(m.toolCalls ?? [])];
+            for (let i = tcs.length - 1; i >= 0; i--) {
+              if (tcs[i].name === ev.name) { tcs[i] = { name: ev.name, isError: ev.isError }; break; }
+            }
+            return { ...m, toolCalls: tcs };
+          }));
+        } else if (ev.type === "done") {
+          setMessages((prev) => prev.map((m) => m.id === draftId ? { ...m, content: ev.message, toolCalls: ev.toolCalls.map((tc) => ({ name: tc.name, isError: tc.isError })) } : m));
+        } else if (ev.type === "error") {
+          throw new Error(ev.error);
+        }
+      }
     } catch (err: any) {
-      if (err?.name === "AbortError") return; // intentional abort, no UI noise
-      setMessages((prev) => [...prev, { role: "assistant", content: `Sorry — ${err.message ?? "request failed"}` }]);
+      if (err?.name === "AbortError") return;
+      setMessages((prev) => [...prev, { id: newId(), role: "assistant", content: `Sorry — ${err.message ?? "request failed"}` }]);
     } finally {
       if (abortRef.current === controller) {
         setLoading(false);
@@ -93,6 +116,7 @@ export default function ChatPanel() {
     setLoading(false);
     setMessages([
       {
+        id: GREETING_ID,
         role: "assistant",
         content: GREETING_MESSAGE,
         isGreeting: true,
@@ -123,8 +147,8 @@ export default function ChatPanel() {
       </div>
 
       <div className="flex-1 overflow-y-auto flex flex-col gap-4 pr-1">
-        {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+        {messages.map((m) => (
+          <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
             <div
               className={`max-w-[85%] sm:max-w-[78%] rounded-[16px] px-4 py-3 text-[14px] leading-relaxed ${
                 m.role === "user"
