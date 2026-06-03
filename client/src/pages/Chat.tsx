@@ -46,12 +46,23 @@ export default function Chat() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
+
+  useEffect(() => {
+    return () => { abortRef.current?.abort(); };
+  }, []);
 
   const handleSend = async (overrideText?: string) => {
     const text = (overrideText ?? input).trim();
     if (!text || loading) return;
+
+    // Abort any in-flight request from a prior send (defense in depth — the
+    // `loading` guard above usually catches this).
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     // Derive history from current messages BEFORE any state mutation.
     // Exclude the initial greeting (it's not a real model turn).
@@ -64,7 +75,7 @@ export default function Chat() {
     setLoading(true);
     try {
       const pageContext = derivePageContext(location);
-      const res = await sendMessage(text, pageContext, history);
+      const res = await sendMessage(text, pageContext, history, controller.signal);
       setMessages((prev) => [
         ...prev,
         {
@@ -73,10 +84,14 @@ export default function Chat() {
           toolCalls: res.toolCalls?.map((tc) => ({ name: tc.name, isError: tc.isError })),
         },
       ]);
-    } catch {
-      setMessages((prev) => [...prev, { role: "assistant", content: "Sorry — I couldn't reach the assistant. Try again?" }]);
+    } catch (err: any) {
+      if (err?.name === "AbortError") return; // intentional abort, no UI noise
+      setMessages((prev) => [...prev, { role: "assistant", content: `Sorry — ${err.message ?? "request failed"}` }]);
     } finally {
-      setLoading(false);
+      if (abortRef.current === controller) {
+        setLoading(false);
+        abortRef.current = null;
+      }
     }
   };
 
