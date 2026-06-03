@@ -20,11 +20,13 @@ export async function sendMessage(
   message: string,
   pageContext: PageContext = {},
   history: HistoryItem[] = [],
+  signal?: AbortSignal,
 ): Promise<ChatResponse> {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message, pageContext, history }),
+    signal,
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}) as { error?: string; details?: string });
