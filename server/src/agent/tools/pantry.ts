@@ -108,4 +108,16 @@ const updatePantryBatchTool: ToolDef = {
   },
 };
 
-export const pantryTools: ToolDef[] = [getPantry, addPantryBatch, updatePantryBatchTool];
+
+
+const consumePantryBatchTool: ToolDef = {
+  name: "consume_pantry_batch",
+  description:
+    "Mark a pantry batch as fully consumed (soft delete via consumedAt). Use when the user says they used up an ingredient.",
+  schema: z.object({ batchId: z.number().int() }),
+  handler: async (input) => {
+    const batch = await softDeleteBatch(input.batchId);
+    return { batch };
+  },
+};
+export const pantryTools: ToolDef[] = [getPantry, addPantryBatch, updatePantryBatchTool, consumePantryBatchTool];
