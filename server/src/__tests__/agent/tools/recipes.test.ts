@@ -67,3 +67,21 @@ describe("archive_meal", () => {
     expect(result.meal.archivedAt).not.toBeNull();
   });
 });
+
+describe("unarchive_meal", () => {
+  it("calls unarchiveMeal and clears archivedAt", async () => {
+    const m = await prisma.meal.create({
+      data: { name: "test-pasta-archived", isDefault: true, recipeId: 99708, archivedAt: new Date() },
+    });
+    const unarchive = recipeTools.find((t) => t.name === "unarchive_meal")!;
+    expect(unarchive).toBeDefined();
+    const result: any = await unarchive.handler({ mealId: m.id }, ctx);
+    expect(result.meal.archivedAt).toBeNull();
+  });
+
+  it("rejects non-integer mealId", () => {
+    const unarchive = recipeTools.find((t) => t.name === "unarchive_meal")!;
+    expect(unarchive).toBeDefined();
+    expect(() => unarchive.schema.parse({ mealId: 1.5 })).toThrow();
+  });
+});
