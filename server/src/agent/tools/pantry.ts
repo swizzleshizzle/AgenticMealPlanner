@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma } from "../../lib/prisma.js";
-import { createBatch, updateBatch, softDeleteBatch } from "../../services/pantryBatchService.js";
+import { createBatch, updateBatch, softDeleteBatch, hardDeleteBatch } from "../../services/pantryBatchService.js";
 import type { ToolDef } from "../types.js";
 
 
@@ -120,4 +120,15 @@ const consumePantryBatchTool: ToolDef = {
     return { batch };
   },
 };
-export const pantryTools: ToolDef[] = [getPantry, addPantryBatch, updatePantryBatchTool, consumePantryBatchTool];
+
+const deletePantryBatchTool: ToolDef = {
+  name: "delete_pantry_batch",
+  description:
+    "Permanently delete a pantry batch (hard delete; not reversible). Prefer consume_pantry_batch in most cases. Use only when the user explicitly wants to remove a batch that was created in error.",
+  schema: z.object({ batchId: z.number().int() }),
+  handler: async (input) => {
+    await hardDeleteBatch(input.batchId);
+    return { deletedId: input.batchId };
+  },
+};
+export const pantryTools: ToolDef[] = [getPantry, addPantryBatch, updatePantryBatchTool, consumePantryBatchTool, deletePantryBatchTool];

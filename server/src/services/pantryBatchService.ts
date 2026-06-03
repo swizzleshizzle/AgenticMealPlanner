@@ -149,3 +149,8 @@ export async function restoreBatch(id: number) {
     include: { ingredient: true },
   });
 }
+
+export async function hardDeleteBatch(id: number) {
+  const deleted = await prisma.pantryBatch.delete({ where: { id } });
+  return { id: deleted.id };
+}
