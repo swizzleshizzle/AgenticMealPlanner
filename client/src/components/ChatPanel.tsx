@@ -21,6 +21,8 @@ const SUGGESTIONS = [
   "Scale Sunday's meal prep to 6 servings instead of 4",
 ];
 
+const GREETING_MESSAGE = "Hey! I'm your meal planning sidekick. Ask me to swap meals, scale portions, or check what's in the fridge.";
+
 function formatBold(text: string): string {
   // Tiny safe formatter: only **bold** spans; everything else escaped
   const escaped = text
@@ -35,7 +37,7 @@ export default function ChatPanel() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content: "Hey! I'm your meal planning sidekick. Ask me to swap meals, scale portions, or check what's in the fridge.",
+      content: GREETING_MESSAGE,
       isGreeting: true,
     },
   ]);
@@ -91,18 +93,39 @@ export default function ChatPanel() {
     }
   };
 
+  const clearConversation = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setLoading(false);
+    setMessages([
+      {
+        role: "assistant",
+        content: GREETING_MESSAGE,
+        isGreeting: true,
+      },
+    ]);
+    setInput("");
+  };
+
   return (
     <div className="flex flex-col gap-5 h-full">
       <div className="flex items-center gap-2.5">
         <div className="w-9 h-9 rounded-[10px] bg-accent-soft text-accent-ink grid place-items-center">
           <Sparkles size={17} />
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <h1 className="text-[20px] sm:text-[22px] font-semibold -tracking-[0.02em] text-ink-1">
             Kitchen Assistant
           </h1>
           <div className="text-[12px] text-ink-3">Claude · knows your plan, pantry, and recipes</div>
         </div>
+        <button
+          onClick={clearConversation}
+          className="text-[12px] px-3 py-1.5 rounded-full bg-surface-1 border border-line text-ink-2 hover:bg-surface-2 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={messages.length <= 1}
+        >
+          New chat
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto flex flex-col gap-4 pr-1">
