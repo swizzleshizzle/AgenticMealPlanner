@@ -125,6 +125,19 @@ export default function ChatPanel() {
     setInput("");
   };
 
+  function groupChips(tcs: ToolCall[]): { name: string; count: number; isError: boolean }[] {
+    const out: { name: string; count: number; isError: boolean }[] = [];
+    for (const tc of tcs) {
+      const last = out[out.length - 1];
+      if (last && last.name === tc.name && last.isError === tc.isError) {
+        last.count++;
+      } else {
+        out.push({ name: tc.name, count: 1, isError: tc.isError });
+      }
+    }
+    return out;
+  }
+
   return (
     <div className="flex flex-col gap-5 h-full">
       <div className="flex items-center gap-2.5">
@@ -168,17 +181,17 @@ export default function ChatPanel() {
               </div>
               {m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
-                  {m.toolCalls.map((tc, j) => (
+                  {groupChips(m.toolCalls).map((g, j) => (
                     <span
                       key={j}
                       className={`text-[11px] px-2 py-[2px] rounded-full border ${
-                        tc.isError
+                        g.isError
                           ? "bg-red-50 text-red-700 border-red-200"
                           : "bg-surface-2 text-ink-3 border-line"
                       }`}
-                      title={tc.isError ? "Tool call failed" : "Tool call succeeded"}
+                      title={g.isError ? "Tool call failed" : "Tool call succeeded"}
                     >
-                      🔧 {tc.name}
+                      🔧 {g.name}{g.count > 1 ? ` ×${g.count}` : ""}
                     </span>
                   ))}
                 </div>
