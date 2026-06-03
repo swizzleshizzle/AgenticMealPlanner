@@ -1,9 +1,8 @@
 import { z } from "zod";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../../lib/prisma.js";
 import { createBatch } from "../../services/pantryBatchService.js";
 import type { ToolDef } from "../types.js";
 
-const prisma = new PrismaClient();
 
 const LocationEnum = z.enum(["fridge", "freezer", "pantry"]);
 
@@ -23,7 +22,7 @@ const getPantry: ToolDef = {
     if (input.category || input.q) {
       where.ingredient = {};
       if (input.category) where.ingredient.category = input.category;
-      if (input.q) where.ingredient.name = { contains: input.q.toLowerCase() };
+      if (input.q) where.ingredient.name = { contains: input.q, mode: "insensitive" };
     }
     if (input.expiringWithinDays) {
       const cutoff = new Date();

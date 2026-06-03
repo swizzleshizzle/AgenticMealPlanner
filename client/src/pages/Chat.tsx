@@ -15,6 +15,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   toolCalls?: ToolCall[];
+  isGreeting?: boolean;
 }
 
 const SUGGESTIONS = [
@@ -39,23 +40,34 @@ export default function Chat() {
     {
       role: "assistant",
       content: "Hey! I'm your meal planning sidekick. Ask me to swap meals, scale portions, or check what's in the fridge.",
+      isGreeting: true,
     },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
+
+  useEffect(() => {
+    return () => { abortRef.current?.abort(); };
+  }, []);
 
   const handleSend = async (overrideText?: string) => {
     const text = (overrideText ?? input).trim();
     if (!text || loading) return;
 
+    // Abort any in-flight request from a prior send (defense in depth — the
+    // `loading` guard above usually catches this).
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     // Derive history from current messages BEFORE any state mutation.
-    // The initial greeting is assistant-only and not a real turn, so we
-    // include all visible user/assistant turns up to this point.
+    // Exclude the initial greeting (it's not a real model turn).
     const history: HistoryItem[] = messages
-      .filter((m) => m.role === "user" || m.role === "assistant")
+      .filter((m) => !m.isGreeting)
       .map((m) => ({ role: m.role, content: m.content }));
 
     setInput("");
@@ -63,7 +75,7 @@ export default function Chat() {
     setLoading(true);
     try {
       const pageContext = derivePageContext(location);
-      const res = await sendMessage(text, pageContext, history);
+      const res = await sendMessage(text, pageContext, history, controller.signal);
       setMessages((prev) => [
         ...prev,
         {
@@ -72,10 +84,14 @@ export default function Chat() {
           toolCalls: res.toolCalls?.map((tc) => ({ name: tc.name, isError: tc.isError })),
         },
       ]);
-    } catch {
-      setMessages((prev) => [...prev, { role: "assistant", content: "Sorry — I couldn't reach the assistant. Try again?" }]);
+    } catch (err: any) {
+      if (err?.name === "AbortError") return; // intentional abort, no UI noise
+      setMessages((prev) => [...prev, { role: "assistant", content: `Sorry — ${err.message ?? "request failed"}` }]);
     } finally {
-      setLoading(false);
+      if (abortRef.current === controller) {
+        setLoading(false);
+        abortRef.current = null;
+      }
     }
   };
 
