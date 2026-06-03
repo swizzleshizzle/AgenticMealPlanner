@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma } from "../../lib/prisma.js";
-import { createBatch } from "../../services/pantryBatchService.js";
+import { createBatch, updateBatch, softDeleteBatch, hardDeleteBatch } from "../../services/pantryBatchService.js";
 import type { ToolDef } from "../types.js";
 
 
@@ -89,4 +89,46 @@ const addPantryBatch: ToolDef = {
   },
 };
 
-export const pantryTools: ToolDef[] = [getPantry, addPantryBatch];
+
+const updatePantryBatchTool: ToolDef = {
+  name: "update_pantry_batch",
+  description:
+    "Update a pantry batch's quantity, unit, location, or expiration date. Use when the user reports remaining quantity changed (e.g., 'I have 2 cups of rice left, not 4').",
+  schema: z.object({
+    batchId: z.number().int(),
+    quantity: z.number().positive().optional(),
+    unit: z.string().optional(),
+    location: LocationEnum.optional(),
+    expirationDate: z.string().optional(),
+  }),
+  handler: async (input) => {
+    const { batchId, ...patch } = input;
+    const batch = await updateBatch(batchId, patch);
+    return { batch };
+  },
+};
+
+
+
+const consumePantryBatchTool: ToolDef = {
+  name: "consume_pantry_batch",
+  description:
+    "Mark a pantry batch as fully consumed (soft delete via consumedAt). Use when the user says they used up an ingredient.",
+  schema: z.object({ batchId: z.number().int() }),
+  handler: async (input) => {
+    const batch = await softDeleteBatch(input.batchId);
+    return { batch };
+  },
+};
+
+const deletePantryBatchTool: ToolDef = {
+  name: "delete_pantry_batch",
+  description:
+    "Permanently delete a pantry batch (hard delete; not reversible). Prefer consume_pantry_batch in most cases. Use only when the user explicitly wants to remove a batch that was created in error.",
+  schema: z.object({ batchId: z.number().int() }),
+  handler: async (input) => {
+    await hardDeleteBatch(input.batchId);
+    return { deletedId: input.batchId };
+  },
+};
+export const pantryTools: ToolDef[] = [getPantry, addPantryBatch, updatePantryBatchTool, consumePantryBatchTool, deletePantryBatchTool];
