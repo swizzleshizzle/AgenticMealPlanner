@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { prisma } from "../../lib/prisma.js";
 import type { ToolDef } from "../types.js";
-import { updatePlannedMeal } from "../../services/plannerService.js";
+import { updatePlannedMeal, removePlannedMeal } from "../../services/plannerService.js";
 import { deductIngredientsForMeal } from "../../services/pantryService.js";
 
 
@@ -155,6 +155,17 @@ const markMealCooked: ToolDef = {
   },
 };
 
+
+const removePlannedMealTool: ToolDef = {
+  name: "remove_planned_meal",
+  description: "Delete a planned-meal slot from the week's plan. Use this when the user wants to clear a slot entirely (not skip it).",
+  schema: z.object({ plannedMealId: z.number().int() }),
+  handler: async (input) => {
+    await removePlannedMeal(input.plannedMealId);
+    return { deletedId: input.plannedMealId };
+  },
+};
+
 export const planTools: ToolDef[] = [
   getPlannedWeek,
   addPlannedMeal,
@@ -162,4 +173,5 @@ export const planTools: ToolDef[] = [
   skipMeal,
   scaleServings,
   markMealCooked,
+  removePlannedMealTool,
 ];
