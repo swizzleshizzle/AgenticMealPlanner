@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { prisma } from "../../lib/prisma.js";
 import type { ToolDef } from "../types.js";
-import { updatePlannedMeal, removePlannedMeal } from "../../services/plannerService.js";
+import { updatePlannedMeal, removePlannedMeal, updatePlan } from "../../services/plannerService.js";
 import { deductIngredientsForMeal } from "../../services/pantryService.js";
 
 
@@ -166,6 +166,29 @@ const removePlannedMealTool: ToolDef = {
   },
 };
 
+
+const PlanStatusEnum = z.enum(["draft", "active", "completed"]);
+
+const setPlanStatusTool: ToolDef = {
+  name: "set_plan_status",
+  description:
+    "Change a weekly plan's status. 'draft' = still being filled in, 'active' = current/in-progress, 'completed' = done. Use this when the user wants to mark a week as finished, or revert a published plan to a draft.",
+  schema: z.object({
+    planId: z.number().int(),
+    status: PlanStatusEnum,
+  }),
+  handler: async (input) => {
+    const plan = await updatePlan(input.planId, { status: input.status });
+    return {
+      plan: {
+        id: plan.id,
+        weekStartDate: dbDateYmd(plan.weekStartDate),
+        status: plan.status,
+      },
+    };
+  },
+};
+
 export const planTools: ToolDef[] = [
   getPlannedWeek,
   addPlannedMeal,
@@ -174,4 +197,5 @@ export const planTools: ToolDef[] = [
   scaleServings,
   markMealCooked,
   removePlannedMealTool,
+  setPlanStatusTool,
 ];
