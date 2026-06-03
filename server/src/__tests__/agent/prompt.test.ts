@@ -79,4 +79,16 @@ describe("buildSystemPrompt", () => {
     expect(out).not.toMatch(/Monday-anchored/);
     expect(out).not.toMatch(/resolve it to a Monday/);
   });
+
+  it("lists the new write tools in the How you work section", () => {
+    const out = buildSystemPrompt({ today: "2026-05-14", currentWeekStart: "2026-05-10", pageContext: {} });
+    for (const name of ["unarchive_meal", "remove_planned_meal", "set_plan_status", "generate_full_week"]) {
+      expect(out).toContain(`\`${name}\``);
+    }
+  });
+
+  it("warns about destructive write actions", () => {
+    const out = buildSystemPrompt({ today: "2026-05-14", currentWeekStart: "2026-05-10", pageContext: {} });
+    expect(out).toMatch(/confirm before invoking/i);
+  });
 });

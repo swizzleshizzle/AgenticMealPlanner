@@ -1,5 +1,7 @@
 import { callClaudeViaSdk } from "./sdkClient.js";
 import { filterValidPlannedMeals, type MealCapability } from "./mealPlannerRules.js";
+import { prisma } from "../lib/prisma.js";
+import { addPlannedMeal, getPlanById } from "../services/plannerService.js";
 
 interface MealSummary {
   id: number;
@@ -27,7 +29,7 @@ interface SuggestedPlan {
   }[];
 }
 
-export async function generateWeeklyPlan(
+async function _generateMealSuggestions(
   meals: MealSummary[],
   pantry: PantryOverview[],
   recentMealIds: number[],
@@ -82,4 +84,50 @@ Return ONLY valid JSON:
     capabilityMap[m.id] = { id: m.id, canBatch: m.canBatch, canFresh: m.canFresh };
   }
   return { meals: filterValidPlannedMeals(suggested.meals, capabilityMap) };
+}
+
+/**
+ * Generate a full week of AI-suggested meals for an existing WeeklyPlan.
+ * Fetches available meals, pantry state, and recent meal history, calls the
+ * AI planner, inserts all suggested PlannedMeal rows, and returns the
+ * updated WeeklyPlan (with plannedMeals included).
+ */
+export async function generateWeeklyPlan(planId: number) {
+  const allMeals = await prisma.meal.findMany({
+    where: { isDefault: true, archivedAt: null },
+    select: { id: true, name: true, canBatch: true, canFresh: true, tags: true, servings: true, calories: true },
+  });
+
+  const pantryItems = await prisma.pantryBatch.findMany({
+    where: { consumedAt: null },
+    include: { ingredient: true },
+  });
+  const pantry = pantryItems.map((p) => ({
+    name: p.ingredient.name,
+    quantity: p.quantity,
+    unit: p.unit,
+  }));
+
+  const twoWeeksAgo = new Date();
+  twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+  const recentPlans = await prisma.plannedMeal.findMany({
+    where: { plan: { weekStartDate: { gte: twoWeeksAgo } } },
+    select: { mealId: true },
+  });
+  const recentMealIds = [...new Set(recentPlans.map((p) => p.mealId))];
+
+  const suggested = await _generateMealSuggestions(allMeals, pantry, recentMealIds);
+
+  for (const meal of suggested.meals) {
+    await addPlannedMeal(planId, {
+      mealId: meal.mealId,
+      day: meal.day,
+      mealSlot: meal.mealSlot,
+      servings: meal.servings,
+      cookStyle: meal.cookStyle,
+    });
+  }
+
+  const updatedPlan = await getPlanById(planId);
+  return updatedPlan!;
 }
