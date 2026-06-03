@@ -91,4 +91,11 @@ describe("buildSystemPrompt", () => {
     const out = buildSystemPrompt({ today: "2026-05-14", currentWeekStart: "2026-05-10", pageContext: {} });
     expect(out).toMatch(/confirm before invoking/i);
   });
+
+  it("lists the new pantry write tools", () => {
+    const out = buildSystemPrompt({ today: "2026-05-14", currentWeekStart: "2026-05-10", pageContext: {} });
+    for (const name of ["update_pantry_batch", "consume_pantry_batch", "delete_pantry_batch"]) {
+      expect(out).toContain(`\`${name}\``);
+    }
+  });
 });
