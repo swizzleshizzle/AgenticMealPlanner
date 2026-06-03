@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma } from "../../lib/prisma.js";
-import { createBatch } from "../../services/pantryBatchService.js";
+import { createBatch, updateBatch, softDeleteBatch } from "../../services/pantryBatchService.js";
 import type { ToolDef } from "../types.js";
 
 
@@ -89,4 +89,23 @@ const addPantryBatch: ToolDef = {
   },
 };
 
-export const pantryTools: ToolDef[] = [getPantry, addPantryBatch];
+
+const updatePantryBatchTool: ToolDef = {
+  name: "update_pantry_batch",
+  description:
+    "Update a pantry batch's quantity, unit, location, or expiration date. Use when the user reports remaining quantity changed (e.g., 'I have 2 cups of rice left, not 4').",
+  schema: z.object({
+    batchId: z.number().int(),
+    quantity: z.number().positive().optional(),
+    unit: z.string().optional(),
+    location: LocationEnum.optional(),
+    expirationDate: z.string().optional(),
+  }),
+  handler: async (input) => {
+    const { batchId, ...patch } = input;
+    const batch = await updateBatch(batchId, patch);
+    return { batch };
+  },
+};
+
+export const pantryTools: ToolDef[] = [getPantry, addPantryBatch, updatePantryBatchTool];
