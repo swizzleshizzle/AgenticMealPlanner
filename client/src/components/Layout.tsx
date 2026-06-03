@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   Home,
   BookMarked,
@@ -12,6 +12,8 @@ import {
   Menu,
   X,
 } from "lucide-react";
+import ChatFab from "./ChatFab";
+import ChatDrawer from "./ChatDrawer";
 
 const NAV = [
   { to: "/",         label: "Today",     end: true,  icon: Home },
@@ -82,6 +84,9 @@ function ProfileFooter() {
 
 export default function Layout() {
   const [open, setOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const routeLocation = useLocation();
+  const fabHidden = routeLocation.pathname === "/chat";
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
@@ -144,6 +149,8 @@ export default function Layout() {
           <Outlet />
         </div>
       </main>
+      {!fabHidden && <ChatFab onClick={() => setChatOpen(true)} />}
+      <ChatDrawer open={chatOpen} onClose={() => setChatOpen(false)} />
     </div>
   );
 }
