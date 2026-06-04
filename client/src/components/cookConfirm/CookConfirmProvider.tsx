@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useState, type ReactNode } from
 import type { PlannedMeal, DeductOverride, CookPreviewInputLine } from "../../api/plans";
 import { getPlan, markCookedWithOverrides, getCookPreview } from "../../api/plans";
 import { getPantry, type PantryCard } from "../../api/pantry";
+import { saveAlias, deleteAlias } from "../../api/ingredients";
 import { useToast } from "../ui/ToastProvider";
 import CookConfirmModal from "./CookConfirmModal";
 
@@ -52,6 +53,18 @@ export default function CookConfirmProvider({ children }: { children: ReactNode 
     return res.preview;
   };
 
+  const handleRepointPersist = (aliasName: string, ingredientId: number) => {
+    const key = aliasName.trim().toLowerCase();
+    saveAlias(key, ingredientId)
+      .then(() =>
+        showToast({
+          message: `Remembered "${aliasName}".`,
+          action: { label: "Undo", onClick: () => { void deleteAlias(key); } },
+        }),
+      )
+      .catch(() => {/* non-fatal: matching still worked for this cook */});
+  };
+
   const submit = async (overrides: DeductOverride[]) => {
     if (!open) return;
     try {
@@ -77,6 +90,7 @@ export default function CookConfirmProvider({ children }: { children: ReactNode 
           onCancel={() => setOpen(null)}
           onPreview={preview}
           onSubmit={submit}
+          onRepointPersist={handleRepointPersist}
         />
       )}
     </CookConfirmCtx.Provider>
