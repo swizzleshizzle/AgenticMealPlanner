@@ -3,6 +3,7 @@ import * as mealService from "../services/mealService.js";
 import { upload, uploadImage, uploadPdfOnly } from "../middleware/upload.js";
 import { parseRecipeFromFile } from "../claude/recipeParser.js";
 import { stashImportPdf, popImportPdf } from "../services/importSessions.js";
+import { resolveIngredientId } from "../services/ingredientResolve.js";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -95,18 +96,31 @@ router.post("/import", upload.single("file"), async (req, res) => {
   try {
     const parsed = await parseRecipeFromFile(req.file.path);
 
+    const existing = await prisma.ingredient.findMany({ select: { id: true, name: true } });
+    const aliasRows = await prisma.ingredientAlias.findMany({ select: { alias: true, ingredientId: true } });
+    const aliasMap = new Map(aliasRows.map((a) => [a.alias, a.ingredientId]));
+
     const ingredientMap = new Map<string, number>();
     for (const ing of parsed.ingredients) {
-      const ingredient = await prisma.ingredient.upsert({
-        where: { name: ing.name },
-        update: {},
-        create: {
-          name: ing.name,
-          category: ing.category as any,
-          defaultUnit: ing.unit,
-        },
-      });
-      ingredientMap.set(ing.name, ingredient.id);
+      const resolved = resolveIngredientId(ing.name, existing, aliasMap);
+      let ingredientId: number;
+      if (resolved) {
+        ingredientId = resolved.id;
+      } else {
+        const created = await prisma.ingredient.upsert({
+          where: { name: ing.name },
+          update: {},
+          create: {
+            name: ing.name,
+            category: ing.category as any,
+            defaultUnit: ing.unit,
+          },
+        });
+        ingredientId = created.id;
+        // so later lines in this same import can match the just-created row
+        existing.push({ id: created.id, name: created.name });
+      }
+      ingredientMap.set(ing.name, ingredientId);
     }
 
     const importSessionId = stashImportPdf(req.file.path);

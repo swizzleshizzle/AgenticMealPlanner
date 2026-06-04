@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
 import * as plannerService from "../services/plannerService.js";
-import { deductIngredientsForMeal, type DeductResult } from "../services/pantryService.js";
+import { deductIngredientsForMeal, getPantryCards, type DeductResult } from "../services/pantryService.js";
+import { buildCookPreview, type PantryCardLite, type CookPreviewInputLine } from "../services/cookPreview.js";
 import { generateWeeklyPlan } from "../claude/mealPlanner.js";
 
 const router = Router();
@@ -65,16 +66,16 @@ router.put("/:planId/meals/:mealId", async (req, res) => {
       res.status(400).json({ error: "invalid override row" });
       return;
     }
+    // Duplicate ingredientIds are allowed: re-pointed cook-confirm lines can
+    // collapse onto one pantry ingredient, and runDeduction drains them
+    // sequentially within a single transaction (compounds correctly).
     const ids = overrides.map((o: any) => o.ingredientId);
-    if (new Set(ids).size !== ids.length) {
-      res.status(400).json({ error: "duplicate ingredientId in overrides" });
-      return;
-    }
+    const uniqueIds = [...new Set(ids)];
     const found = await prisma.ingredient.findMany({
-      where: { id: { in: ids } },
+      where: { id: { in: uniqueIds } },
       select: { id: true },
     });
-    if (found.length !== ids.length) {
+    if (found.length !== uniqueIds.length) {
       res.status(400).json({ error: "unknown ingredientId in overrides" });
       return;
     }
@@ -105,6 +106,48 @@ router.put("/:planId/meals/:mealId", async (req, res) => {
   });
 
   res.json({ ...result.updated, deduction: result.deduction });
+});
+
+router.post("/:planId/meals/:mealId/cook-preview", async (req, res) => {
+  const lines = req.body?.lines;
+  if (
+    !Array.isArray(lines) ||
+    lines.length === 0 ||
+    !lines.every(
+      (l: any) =>
+        typeof l?.ingredientId === "number" &&
+        typeof l?.name === "string" &&
+        typeof l?.quantity === "number" &&
+        typeof l?.unit === "string",
+    )
+  ) {
+    res.status(400).json({ error: "lines must be a non-empty array of {ingredientId,name,quantity,unit}" });
+    return;
+  }
+
+  const cards = await getPantryCards();
+  const lite: PantryCardLite[] = cards.map((c) => ({
+    ingredientId: c.ingredient.id,
+    name: c.ingredient.name,
+    category: c.ingredient.category,
+    defaultUnit: c.ingredient.defaultUnit,
+    densityGPerMl: c.ingredient.densityGPerMl,
+    gramsPerCount: c.ingredient.gramsPerCount,
+    batches: c.batches.map((b) => ({
+      id: b.id,
+      quantity: b.quantity,
+      unit: b.unit,
+      expirationDate: b.expirationDate,
+      tags: b.tags,
+    })),
+    totalsByUnit: c.totalsByUnit,
+  }));
+
+  const aliasRows = await prisma.ingredientAlias.findMany({ select: { alias: true, ingredientId: true } });
+  const aliasMap = new Map(aliasRows.map((a) => [a.alias, a.ingredientId]));
+
+  const preview = buildCookPreview(lines as CookPreviewInputLine[], lite, aliasMap);
+  res.json({ preview });
 });
 
 router.delete("/:planId/meals/:mealId", async (req, res) => {

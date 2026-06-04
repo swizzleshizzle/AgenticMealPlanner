@@ -138,8 +138,21 @@ model Ingredient {
   pantryBatches   PantryBatch[]
   shoppingItems   ShoppingItem[]
   receiptItems    ReceiptItem[]
+  aliases         IngredientAlias[]
 
   @@map("ingredients")
+}
+
+model IngredientAlias {
+  id           Int      @id @default(autoincrement())
+  alias        String   @unique
+  ingredientId Int      @map("ingredient_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@index([ingredientId])
+  @@map("ingredient_aliases")
 }
 
 model MealIngredient {

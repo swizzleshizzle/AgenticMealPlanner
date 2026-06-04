@@ -116,7 +116,7 @@ describe("PUT /api/plans/:planId/meals/:mealId — cooked transition with overri
     expect(res.body.error).toBe("overrides must be an array");
   });
 
-  it("rejects duplicate ingredientId rows with 400", async () => {
+  it("accepts duplicate ingredientId rows and compounds them in one transaction", async () => {
     const { chicken, plan, pm } = await seed();
 
     const res = await request(app)
@@ -129,8 +129,9 @@ describe("PUT /api/plans/:planId/meals/:mealId — cooked transition with overri
         ],
       });
 
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe("duplicate ingredientId in overrides");
+    expect(res.status).toBe(200);
+    const batch = await prisma.pantryBatch.findFirst({ where: { ingredientId: chicken.id, consumedAt: null } });
+    expect(batch?.quantity).toBeCloseTo(300, 5); // seed chicken 500g - 100 - 100
   });
 
   it("rejects qty<=0 with 400", async () => {
@@ -212,5 +213,36 @@ describe("PUT /api/plans/:planId/meals/:mealId — cooked transition with overri
 
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: "Planned meal not found" });
+  });
+
+});
+
+describe("POST /api/plans/:planId/meals/:mealId/cook-preview", () => {
+  beforeEach(reset);
+
+  it("returns confidence-tiered preview lines without mutating the pantry", async () => {
+    const chicken = await prisma.ingredient.create({ data: { name: "chicken thigh", defaultUnit: "g", category: "protein" } });
+    await prisma.pantryBatch.create({ data: { ingredientId: chicken.id, quantity: 800, unit: "g", location: "pantry" } });
+
+    // The preview route ignores the URL planId/mealId (it works off the posted
+    // lines), so placeholder ids are fine here.
+    const res = await request(app)
+      .post(`/api/plans/1/meals/1/cook-preview`)
+      .send({ lines: [{ ingredientId: chicken.id, name: "chicken thigh", quantity: 200, unit: "g" }] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.preview).toHaveLength(1);
+    const p = res.body.preview[0];
+    expect(p.confidence).toBe("exact");
+    expect(p.deductQuantity).toBeCloseTo(200, 5);
+    expect(p.deductUnit).toBe("g");
+
+    const batch = await prisma.pantryBatch.findFirst({ where: { ingredientId: chicken.id } });
+    expect(batch?.quantity).toBe(800);
+  });
+
+  it("400s when lines is missing or malformed", async () => {
+    const res = await request(app).post(`/api/plans/1/meals/1/cook-preview`).send({});
+    expect(res.status).toBe(400);
   });
 });

@@ -43,6 +43,35 @@ router.post("/", async (req, res) => {
   }
 });
 
+router.post("/aliases", async (req, res) => {
+  const { alias, ingredientId } = req.body ?? {};
+  if (typeof alias !== "string" || !alias.trim() || typeof ingredientId !== "number") {
+    res.status(400).json({ error: "alias (string) and ingredientId (number) required" });
+    return;
+  }
+  const key = alias.trim().toLowerCase();
+  const row = await prisma.ingredientAlias.upsert({
+    where: { alias: key },
+    update: { ingredientId },
+    create: { alias: key, ingredientId },
+  });
+  res.status(201).json(row);
+});
+
+router.delete("/aliases/:alias", async (req, res) => {
+  const key = req.params.alias.toLowerCase();
+  try {
+    await prisma.ingredientAlias.delete({ where: { alias: key } });
+    res.status(204).send();
+  } catch (err: any) {
+    if (err.code === "P2025") {
+      res.status(404).json({ error: "alias not found" });
+      return;
+    }
+    throw err;
+  }
+});
+
 router.patch("/:id", async (req, res) => {
   const id = Number(req.params.id);
   const data = pickFields(req.body);
