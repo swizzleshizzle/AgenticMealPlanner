@@ -10,6 +10,14 @@ app.use(express.json());
 app.use("/ingredients", ingredientsRouter);
 
 async function reset() {
+  // Full FK-ordered wipe (other suites leave rows behind; the serial runner
+  // shares one DB). Everything referencing ingredient must go before it.
+  await prisma.shoppingItem.deleteMany();
+  await prisma.plannedMeal.deleteMany();
+  await prisma.weeklyPlan.deleteMany();
+  await prisma.pantryBatch.deleteMany();
+  await prisma.mealIngredient.deleteMany();
+  await prisma.meal.deleteMany();
   await prisma.ingredientAlias.deleteMany();
   await prisma.ingredient.deleteMany();
 }
