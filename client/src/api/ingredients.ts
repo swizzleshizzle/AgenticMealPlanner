@@ -46,3 +46,12 @@ export const createIngredient = (data: Partial<Ingredient> & { name: string; cat
 
 export const updateIngredient = (id: number, data: IngredientUpdate) =>
   apiFetch<Ingredient>(`/ingredients/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+
+export const saveAlias = (alias: string, ingredientId: number) =>
+  apiFetch<{ id: number; alias: string; ingredientId: number }>("/ingredients/aliases", {
+    method: "POST",
+    body: JSON.stringify({ alias, ingredientId }),
+  });
+
+export const deleteAlias = (alias: string) =>
+  apiFetch<void>(`/ingredients/aliases/${encodeURIComponent(alias)}`, { method: "DELETE" });
