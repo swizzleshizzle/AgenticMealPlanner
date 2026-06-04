@@ -63,6 +63,42 @@ export const markCookedWithOverrides = (
     body: JSON.stringify({ status: "cooked", overrides }),
   });
 
+export type CookConfidence = "exact" | "converted" | "estimated" | "none";
+export type MatchSource = "id" | "alias" | "fuzzy" | "none";
+
+export interface CookPreviewLine {
+  sourceIngredientId: number;
+  name: string;
+  requestedQuantity: number;
+  requestedUnit: string;
+  matchedIngredientId: number | null;
+  matchedName: string | null;
+  matchSource: MatchSource;
+  confidence: CookConfidence;
+  deductQuantity: number;
+  deductUnit: string;
+  pantryTotals: Array<{ unit: string; qty: number }>;
+  projectedRemaining: { qty: number; unit: string } | null;
+  included: boolean;
+}
+
+export interface CookPreviewInputLine {
+  ingredientId: number;
+  name: string;
+  quantity: number;
+  unit: string;
+}
+
+export const getCookPreview = (
+  planId: number,
+  plannedMealId: number,
+  lines: CookPreviewInputLine[],
+) =>
+  apiFetch<{ preview: CookPreviewLine[] }>(
+    `/plans/${planId}/meals/${plannedMealId}/cook-preview`,
+    { method: "POST", body: JSON.stringify({ lines }) },
+  );
+
 // ---------------------------------------------------------------------------
 // Plan / date helpers shared by the Planner and the AddToPlanModal.
 // Kept here (not in a separate util module) so every consumer that already
