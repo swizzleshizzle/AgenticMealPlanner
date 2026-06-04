@@ -143,7 +143,10 @@ router.post("/:planId/meals/:mealId/cook-preview", async (req, res) => {
     totalsByUnit: c.totalsByUnit,
   }));
 
-  const preview = buildCookPreview(lines as CookPreviewInputLine[], lite);
+  const aliasRows = await prisma.ingredientAlias.findMany({ select: { alias: true, ingredientId: true } });
+  const aliasMap = new Map(aliasRows.map((a) => [a.alias, a.ingredientId]));
+
+  const preview = buildCookPreview(lines as CookPreviewInputLine[], lite, aliasMap);
   res.json({ preview });
 });
 
