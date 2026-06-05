@@ -61,7 +61,7 @@ function Brand() {
       </div>
       <div>
         <div className="text-[15px] font-bold text-ink-1 -tracking-[0.015em]">Meal Planner</div>
-        <div className="text-[11px] text-ink-3">REDACTED</div>
+        <div className="text-[11px] text-ink-3">Self-hosted</div>
       </div>
     </div>
   );
@@ -75,7 +75,7 @@ function ProfileFooter() {
         M
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-[12.5px] font-semibold text-ink-1 truncate">REDACTED</div>
+        <div className="text-[12.5px] font-semibold text-ink-1 truncate">Meal Planner</div>
         <div className="text-[10.5px] text-ink-3 truncate">Self-hosted · Tailscale</div>
       </div>
     </div>

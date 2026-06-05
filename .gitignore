@@ -12,3 +12,6 @@ server/storage/
 .worktrees/
 .superpowers/
 server/.env.test
+
+# Internal design/plan/review docs - kept local, not published
+docs/superpowers/
