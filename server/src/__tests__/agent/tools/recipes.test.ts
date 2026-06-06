@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { recipeTools } from "../../../agent/tools/recipes.js";
+import { createMeal } from "../../../services/mealService.js";
 
 const prisma = new PrismaClient();
 const ctx = { pageContext: {} };
@@ -8,6 +9,7 @@ const getMeals = recipeTools.find((t) => t.name === "get_meals")!;
 const getDetail = recipeTools.find((t) => t.name === "get_meal_detail")!;
 const createVersion = recipeTools.find((t) => t.name === "create_recipe_version")!;
 const archive = recipeTools.find((t) => t.name === "archive_meal")!;
+const editRecipe = recipeTools.find((t) => t.name === "edit_recipe")!;
 
 beforeEach(async () => {
   // Delete dependents first to avoid FK constraint violations
@@ -83,5 +85,78 @@ describe("unarchive_meal", () => {
     const unarchive = recipeTools.find((t) => t.name === "unarchive_meal")!;
     expect(unarchive).toBeDefined();
     expect(() => unarchive.schema.parse({ mealId: 1.5 })).toThrow();
+  });
+});
+
+describe("edit_recipe tool", () => {
+  // FK-ordered cleanup: meals (cascades meal_ingredients) before ingredients.
+  beforeEach(async () => {
+    await prisma.plannedMeal.deleteMany({ where: { meal: { name: { startsWith: "test-" } } } });
+    await prisma.meal.deleteMany({ where: { name: { startsWith: "test-" } } });
+    await prisma.ingredientAlias.deleteMany({ where: { ingredient: { name: { startsWith: "test-" } } } });
+    await prisma.ingredient.deleteMany({ where: { name: { startsWith: "test-" } } });
+  });
+
+  async function seedRecipe() {
+    const chicken = await prisma.ingredient.create({
+      data: { name: "test-chicken", category: "protein", defaultUnit: "lb" },
+    });
+    const meal = await createMeal({
+      name: "test-stir-fry",
+      servings: 2,
+      instructions: ["cook the chicken"],
+      ingredients: [{ ingredientId: chicken.id, quantity: 1, unit: "lb" }],
+    });
+    return { chicken, meal };
+  }
+
+  it("exists and is registered", () => {
+    expect(editRecipe).toBeDefined();
+  });
+
+  it("swaps an ingredient and saves a new version (source archived)", async () => {
+    const { meal } = await seedRecipe();
+
+    const result: any = await editRecipe.handler({
+      mealId: meal.id,
+      ingredients: [{ name: "test-tofu", quantity: 14, unit: "oz", category: "protein" }],
+      instructions: ["press the tofu", "cook the tofu"],
+      mode: "version",
+    }, ctx);
+
+    // new meal, same family
+    expect(result.meal.id).not.toBe(meal.id);
+    expect(result.meal.recipeId).toBe(meal.recipeId);
+    // tofu resolved/created onto the new version
+    const names = result.meal.ingredients.map((mi: any) => mi.ingredient.name);
+    expect(names).toContain("test-tofu");
+    expect(names).not.toContain("test-chicken");
+    // instructions rewritten
+    const instr = typeof result.meal.instructions === "string"
+      ? JSON.parse(result.meal.instructions)
+      : result.meal.instructions;
+    expect(instr).toContain("press the tofu");
+    // source archived (version semantics)
+    const source = await prisma.meal.findUnique({ where: { id: meal.id } });
+    expect(source?.archivedAt).not.toBeNull();
+  });
+
+  it("mode=variant leaves the original active", async () => {
+    const { meal } = await seedRecipe();
+
+    const result: any = await editRecipe.handler({
+      mealId: meal.id,
+      ingredients: [{ name: "test-tofu", quantity: 14, unit: "oz", category: "protein" }],
+      mode: "variant",
+    }, ctx);
+
+    expect(result.meal.id).not.toBe(meal.id);
+    const source = await prisma.meal.findUnique({ where: { id: meal.id } });
+    expect(source?.archivedAt).toBeNull();
+  });
+
+  it("rejects an empty ingredients list at the schema", () => {
+    const parsed = editRecipe.schema.safeParse({ mealId: 1, ingredients: [] });
+    expect(parsed.success).toBe(false);
   });
 });

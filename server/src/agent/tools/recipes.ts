@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { prisma } from "../../lib/prisma.js";
-import { supersedeMeal, archiveMeal as svcArchiveMeal, unarchiveMeal as svcUnarchiveMeal } from "../../services/mealService.js";
+import { supersedeMeal, createVariant, archiveMeal as svcArchiveMeal, unarchiveMeal as svcUnarchiveMeal } from "../../services/mealService.js";
+import { resolveOrCreateIngredientId } from "../../services/ingredientResolve.js";
 import type { ToolDef } from "../types.js";
 
 
@@ -91,4 +92,49 @@ const unarchiveMealTool: ToolDef = {
   },
 };
 
-export const recipeTools: ToolDef[] = [getMeals, getMealDetail, createVersionTool, archiveMealTool, unarchiveMealTool];
+const editRecipeTool: ToolDef = {
+  name: "edit_recipe",
+  description:
+    "Persist an edit to a recipe: swap/add/remove ingredients and optionally rewrite the steps or rename it. Pass the COMPLETE new ingredient list (by name — resolved server-side). Defaults to creating a new VERSION (the prior version is archived but recoverable); pass mode:\"variant\" only when the user explicitly wants to keep both the original and the new one. Does NOT recalculate nutrition.",
+  schema: z.object({
+    mealId: z.number().int(),
+    ingredients: z
+      .array(
+        z.object({
+          name: z.string(),
+          quantity: z.number(),
+          unit: z.string(),
+          preparation: z.string().optional(),
+          category: z.string().optional(),
+        }),
+      )
+      .min(1),
+    instructions: z.array(z.string()).optional(),
+    name: z.string().optional(),
+    mode: z.enum(["version", "variant"]).optional(),
+  }),
+  handler: async (input) => {
+    const existing = await prisma.ingredient.findMany({ select: { id: true, name: true } });
+    const aliasRows = await prisma.ingredientAlias.findMany({ select: { alias: true, ingredientId: true } });
+    const aliasMap = new Map(aliasRows.map((a) => [a.alias, a.ingredientId]));
+
+    const ingredients = [];
+    for (const line of input.ingredients) {
+      const ingredientId = await resolveOrCreateIngredientId(
+        { name: line.name, category: line.category, unit: line.unit },
+        existing,
+        aliasMap,
+      );
+      ingredients.push({ ingredientId, quantity: line.quantity, unit: line.unit, preparation: line.preparation });
+    }
+
+    const data = { name: input.name, ingredients, instructions: input.instructions };
+    const meal =
+      input.mode === "variant"
+        ? await createVariant(input.mealId, data)
+        : await supersedeMeal(input.mealId, data);
+    return { meal };
+  },
+};
+
+export const recipeTools: ToolDef[] = [getMeals, getMealDetail, createVersionTool, editRecipeTool, archiveMealTool, unarchiveMealTool];
