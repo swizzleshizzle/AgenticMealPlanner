@@ -98,4 +98,10 @@ describe("buildSystemPrompt", () => {
       expect(out).toContain(`\`${name}\``);
     }
   });
+
+  it("lists the edit_recipe tool and notes it does not recalc nutrition", () => {
+    const out = buildSystemPrompt({ today: "2026-05-14", currentWeekStart: "2026-05-10", pageContext: {} });
+    expect(out).toContain("`edit_recipe`");
+    expect(out).toMatch(/nutrition/i);
+  });
 });

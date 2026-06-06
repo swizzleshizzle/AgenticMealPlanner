@@ -1,4 +1,5 @@
 import { fuzzyMatchIngredient } from "../claude/ingredientMatcher.js";
+import { prisma } from "../lib/prisma.js";
 
 export interface ExistingIngredient {
   id: number;
@@ -25,4 +26,31 @@ export function resolveIngredientId(
   if (match && match.confidence === "high") return { id: match.id, source: "fuzzy" };
 
   return null;
+}
+
+/**
+ * Resolve a name to an existing ingredient id, or CREATE a new canonical
+ * ingredient (name + category + defaultUnit; density/gramsPerCount null).
+ * Mutates `existing` to include creations so later lines in the same batch
+ * can match them. Uses the shared prisma client.
+ */
+export async function resolveOrCreateIngredientId(
+  line: { name: string; category?: string; unit: string },
+  existing: ExistingIngredient[],
+  aliasMap: Map<string, number>,
+): Promise<number> {
+  const resolved = resolveIngredientId(line.name, existing, aliasMap);
+  if (resolved) return resolved.id;
+
+  const created = await prisma.ingredient.upsert({
+    where: { name: line.name },
+    update: {},
+    create: {
+      name: line.name,
+      category: (line.category ?? "other") as any,
+      defaultUnit: line.unit,
+    },
+  });
+  existing.push({ id: created.id, name: created.name });
+  return created.id;
 }
