@@ -40,6 +40,7 @@ export default function CookConfirmProvider({ children }: { children: ReactNode 
       const pm = plan.plannedMeals.find((p) => p.id === plannedMealId);
       if (!pm) {
         showToast({ message: "Couldn't find that meal." });
+        clearCache(cookStore, ACTIVE_KEY);
         return;
       }
       const map = new Map<number, PantryCard>();
@@ -50,6 +51,7 @@ export default function CookConfirmProvider({ children }: { children: ReactNode 
       writeCache(cookStore, ACTIVE_KEY, { planId, plannedMealId: pm.id } satisfies ActiveCook);
     } catch (err: any) {
       showToast({ message: `Couldn't open cook confirm: ${err?.message ?? "unknown error"}` });
+      clearCache(cookStore, ACTIVE_KEY);
     }
   }, [showToast]);
 
