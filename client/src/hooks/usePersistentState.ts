@@ -12,12 +12,12 @@ export function usePersistentState<T>(key: string, initial: T): [T, Dispatch<Set
   const storage = storageRef.current;
 
   const [state, setState] = useState<T>(() => {
-    const cached = readCache<T>(storage, key);
-    return cached !== null ? cached : initial;
+    const cached = readCache<{ v: T }>(storage, key);
+    return cached !== null ? cached.v : initial;
   });
 
   useEffect(() => {
-    writeCache(storage, key, state);
+    writeCache(storage, key, { v: state });
   }, [storage, key, state]);
 
   return [state, setState];
