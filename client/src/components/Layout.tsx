@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import ChatFab from "./ChatFab";
 import ChatDrawer from "./ChatDrawer";
+import { useScrollRestoration } from "../hooks/useScrollRestoration";
 
 const NAV = [
   { to: "/",         label: "Today",     end: true,  icon: Home },
@@ -83,6 +84,7 @@ function ProfileFooter() {
 }
 
 export default function Layout() {
+  useScrollRestoration();
   const [open, setOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const routeLocation = useLocation();
