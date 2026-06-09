@@ -470,7 +470,7 @@ export default function Planner() {
           onChange={(patch) => updatePm(editing, patch)}
           onSwap={() => setPicker({ mode: "swap", day: editing.day as DayKey, slot: editing.mealSlot as Slot, plannedId: editing.id })}
           onRemove={() => removePm(editing)}
-          onOpenRecipe={() => navigate(`/recipes/${editing.meal.id}`)}
+          onOpenRecipe={() => navigate(`/recipes/${editing.meal.id}`, { state: { from: "/planner" } })}
           onClose={() => setEditing(null)}
           onCookedRequested={() => {
             if (!effectiveViewedPlan) return;
