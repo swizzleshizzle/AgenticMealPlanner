@@ -1,10 +1,15 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import type { PlannedMeal, DeductOverride, CookPreviewInputLine } from "../../api/plans";
 import { getPlan, markCookedWithOverrides, getCookPreview } from "../../api/plans";
 import { getPantry, type PantryCard } from "../../api/pantry";
 import { saveAlias, deleteAlias } from "../../api/ingredients";
 import { useToast } from "../ui/ToastProvider";
 import CookConfirmModal from "./CookConfirmModal";
+import { readCache, writeCache, clearCache, safeSessionStorage } from "../../lib/sessionCache";
+
+const cookStore = safeSessionStorage();
+const ACTIVE_KEY = "cook:active";
+interface ActiveCook { planId: number; plannedMealId: number; }
 
 interface Ctx {
   openForMeal: (planId: number, plannedMealId: number) => void;
@@ -42,10 +47,21 @@ export default function CookConfirmProvider({ children }: { children: ReactNode 
       setPantryByIngredient(map);
       setPantryCards(cards);
       setOpen({ planId, pm });
+      writeCache(cookStore, ACTIVE_KEY, { planId, plannedMealId: pm.id } satisfies ActiveCook);
     } catch (err: any) {
       showToast({ message: `Couldn't open cook confirm: ${err?.message ?? "unknown error"}` });
     }
   }, [showToast]);
+
+  const closeModal = useCallback(() => {
+    setOpen(null);
+    clearCache(cookStore, ACTIVE_KEY);
+  }, []);
+
+  useEffect(() => {
+    const active = readCache<ActiveCook>(cookStore, ACTIVE_KEY);
+    if (active) openForMeal(active.planId, active.plannedMealId);
+  }, [openForMeal]);
 
   const preview = async (lines: CookPreviewInputLine[]) => {
     if (!open) return [];
@@ -69,7 +85,7 @@ export default function CookConfirmProvider({ children }: { children: ReactNode 
     if (!open) return;
     try {
       await markCookedWithOverrides(open.planId, open.pm.id, overrides);
-      setOpen(null);
+      closeModal();
       // Notify pages to refetch.
       window.dispatchEvent(new Event("cookconfirm:done"));
     } catch (err: any) {
@@ -87,7 +103,7 @@ export default function CookConfirmProvider({ children }: { children: ReactNode 
           pm={open.pm}
           pantryByIngredient={pantryByIngredient}
           pantryCards={pantryCards}
-          onCancel={() => setOpen(null)}
+          onCancel={closeModal}
           onPreview={preview}
           onSubmit={submit}
           onRepointPersist={handleRepointPersist}
