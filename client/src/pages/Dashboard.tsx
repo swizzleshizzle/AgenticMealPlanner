@@ -482,6 +482,7 @@ function UpcomingPlanCard({ plan }: { plan: WeeklyPlan }) {
             <Link
               key={pm.id}
               to={`/recipes/${pm.meal.id}`}
+              state={{ from: "/" }}
               className="flex items-center gap-3 p-2.5 bg-surface-2 border border-line-soft rounded-[12px] text-left hover:border-line transition"
             >
               <div className="w-12 h-12 rounded-[8px] overflow-hidden flex-shrink-0">
