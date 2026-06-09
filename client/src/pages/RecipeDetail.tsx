@@ -23,6 +23,9 @@ import Pill from "../components/ui/Pill";
 import PhotoTile from "../components/ui/PhotoTile";
 import Button from "../components/ui/Button";
 import { toneForMeal } from "../theme/photoTone";
+import { readCache, writeCache, safeSessionStorage } from "../lib/sessionCache";
+
+const recipeStore = safeSessionStorage();
 
 const DAY_LONG: Record<string, string> = {
   monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday",
@@ -45,13 +48,17 @@ function parseInstructions(raw: unknown): string[] {
 export default function RecipeDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [meal, setMeal] = useState<Meal | null>(null);
+  const [meal, setMeal] = useState<Meal | null>(() => readCache<Meal>(recipeStore, `meal:${id}`));
   const [addOpen, setAddOpen] = useState(false);
   const [family, setFamily] = useState<Meal[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const toast = useToast();
 
-  useEffect(() => { getMeal(Number(id)).then(setMeal).catch(() => setMeal(null)); }, [id]);
+  useEffect(() => {
+    getMeal(Number(id))
+      .then((m) => { setMeal(m); writeCache(recipeStore, `meal:${id}`, m); })
+      .catch(() => { /* keep any cached meal already shown */ });
+  }, [id]);
 
   useEffect(() => {
     if (!meal) return;
