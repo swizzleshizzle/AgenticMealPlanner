@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import {
   ChevronLeft,
   Clock,
@@ -23,6 +23,7 @@ import Pill from "../components/ui/Pill";
 import PhotoTile from "../components/ui/PhotoTile";
 import Button from "../components/ui/Button";
 import { toneForMeal } from "../theme/photoTone";
+import { resolveBackTarget } from "../lib/backTarget";
 import { readCache, writeCache, safeSessionStorage } from "../lib/sessionCache";
 
 const recipeStore = safeSessionStorage();
@@ -48,6 +49,8 @@ function parseInstructions(raw: unknown): string[] {
 export default function RecipeDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const back = resolveBackTarget((location.state as { from?: unknown } | null)?.from);
   const [meal, setMeal] = useState<Meal | null>(() => readCache<Meal>(recipeStore, `meal:${id}`));
   const [addOpen, setAddOpen] = useState(false);
   const [family, setFamily] = useState<Meal[]>([]);
@@ -78,10 +81,10 @@ export default function RecipeDetail() {
     <div className="flex flex-col gap-6 max-w-[920px]">
       <div className="flex items-center justify-between gap-2">
         <button
-          onClick={() => navigate("/recipes")}
+          onClick={() => navigate(back.to)}
           className="inline-flex items-center gap-1.5 text-[13px] text-ink-3 hover:text-ink-1"
         >
-          <ChevronLeft size={14} /> Back to recipes
+          <ChevronLeft size={14} /> {back.label}
         </button>
         <div className="relative">
           <button
@@ -148,7 +151,7 @@ export default function RecipeDetail() {
                 return (
                   <button
                     key={v.id}
-                    onClick={() => navigate(`/recipes/${v.id}`)}
+                    onClick={() => navigate(`/recipes/${v.id}`, { state: location.state })}
                     className={`text-[12px] px-3 py-[5px] rounded-full font-medium border transition ${
                       active ? "bg-accent text-accent-on border-accent" : "bg-surface-1 text-ink-2 border-line hover:border-accent-line"
                     }`}

@@ -261,7 +261,7 @@ export default function Dashboard() {
                   Mark as cooked
                 </Button>
               )}
-              <Button variant="ghost" onClick={() => navigate(`/recipes/${tonight.meal.id}`)}>
+              <Button variant="ghost" onClick={() => navigate(`/recipes/${tonight.meal.id}`, { state: { from: "/" } })}>
                 View recipe
               </Button>
               <Button variant="quiet" onClick={() => navigate("/chat")}>Swap</Button>
@@ -282,7 +282,7 @@ export default function Dashboard() {
                 ) : otherToday.map((pm) => (
                   <button
                     key={pm.id}
-                    onClick={() => navigate(`/recipes/${pm.meal.id}`)}
+                    onClick={() => navigate(`/recipes/${pm.meal.id}`, { state: { from: "/" } })}
                     className="flex items-center gap-3.5 p-3.5 bg-surface-1 border border-line rounded-[14px] text-left transition hover:shadow-[var(--shadow-card-hover)]"
                   >
                     <div className="w-[64px] sm:w-[72px] flex-shrink-0 aspect-square rounded-[10px] overflow-hidden">
@@ -482,6 +482,7 @@ function UpcomingPlanCard({ plan }: { plan: WeeklyPlan }) {
             <Link
               key={pm.id}
               to={`/recipes/${pm.meal.id}`}
+              state={{ from: "/" }}
               className="flex items-center gap-3 p-2.5 bg-surface-2 border border-line-soft rounded-[12px] text-left hover:border-line transition"
             >
               <div className="w-12 h-12 rounded-[8px] overflow-hidden flex-shrink-0">

@@ -367,62 +367,65 @@ export default function Planner() {
                   </div>
 
                   {(["lunch", "dinner"] as const).map((slot) => {
-                    const pm = meals.find((m) => m.mealSlot === slot);
+                    const slotMeals = meals.filter((m) => m.mealSlot === slot);
                     return (
                       <div key={slot} className="flex flex-col gap-1">
                         <div className="text-[10px] uppercase tracking-[0.08em] text-ink-3">{slot}</div>
-                        {pm ? (
-                          <button
-                            onClick={() => setEditing(pm)}
-                            className={`block text-left rounded-[10px] p-2 transition border ${
-                              pm.status === "cooked"
-                                ? "bg-accent-soft border-accent-line"
-                                : pm.status === "skipped"
-                                ? "bg-surface-2 border-line-soft opacity-60"
-                                : "bg-surface-2 border-line-soft hover:border-line"
-                            }`}
-                          >
-                            <div className="mb-1.5 aspect-[16/9] rounded-[6px] overflow-hidden">
-                              {pm.meal.imagePath ? (
-                                <img
-                                  src={`/media/meals/${pm.meal.id}/thumb.jpg`}
-                                  alt={pm.meal.name}
-                                  className="w-full h-full object-cover"
-                                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                                />
-                              ) : (
-                                <PhotoTile tone={toneForMeal(pm.meal)} aspect="16 / 9" round={6} compact />
-                              )}
-                            </div>
-                            <div className="text-[12.5px] font-semibold text-ink-1 leading-tight line-clamp-2">
-                              {pm.meal.name}
-                            </div>
-                            <div className="flex items-center gap-1 mt-1 text-[10.5px] text-ink-3">
-                              {pm.cookStyle === "batch_prep" && <><Flame size={10} /> Prep</>}
-                              {pm.cookStyle === "cook_fresh" && <><Leaf size={10} /> Fresh</>}
-                              {pm.cookStyle === "leftovers"  && <><Refrigerator size={10} /> Leftovers</>}
-                              <span>·</span><span>{pm.servings}×</span>
-                              {pm.status === "cooked" && (
-                                <>
-                                  <span>·</span>
-                                  <span className="text-accent-ink font-semibold">Cooked</span>
-                                </>
-                              )}
-                              {pm.status === "skipped" && (
-                                <>
-                                  <span>·</span>
-                                  <span className="text-ink-3 font-semibold">Skipped</span>
-                                </>
-                              )}
-                            </div>
-                          </button>
-                        ) : (
+                        {slotMeals.length === 0 ? (
                           <button
                             onClick={() => setPicker({ mode: "add", day, slot })}
                             className="flex items-center justify-center gap-1.5 border border-dashed border-line rounded-[10px] py-4 text-[11.5px] text-ink-3 hover:bg-surface-2 hover:border-line transition"
                           >
                             <Plus size={12} /> Add
                           </button>
+                        ) : (
+                          slotMeals.map((pm) => (
+                            <button
+                              key={pm.id}
+                              onClick={() => setEditing(pm)}
+                              className={`block text-left rounded-[10px] p-2 transition border ${
+                                pm.status === "cooked"
+                                  ? "bg-accent-soft border-accent-line"
+                                  : pm.status === "skipped"
+                                  ? "bg-surface-2 border-line-soft opacity-60"
+                                  : "bg-surface-2 border-line-soft hover:border-line"
+                              }`}
+                            >
+                              <div className="mb-1.5 aspect-[16/9] rounded-[6px] overflow-hidden">
+                                {pm.meal.imagePath ? (
+                                  <img
+                                    src={`/media/meals/${pm.meal.id}/thumb.jpg`}
+                                    alt={pm.meal.name}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                                  />
+                                ) : (
+                                  <PhotoTile tone={toneForMeal(pm.meal)} aspect="16 / 9" round={6} compact />
+                                )}
+                              </div>
+                              <div className="text-[12.5px] font-semibold text-ink-1 leading-tight line-clamp-2">
+                                {pm.meal.name}
+                              </div>
+                              <div className="flex items-center gap-1 mt-1 text-[10.5px] text-ink-3">
+                                {pm.cookStyle === "batch_prep" && <><Flame size={10} /> Prep</>}
+                                {pm.cookStyle === "cook_fresh" && <><Leaf size={10} /> Fresh</>}
+                                {pm.cookStyle === "leftovers"  && <><Refrigerator size={10} /> Leftovers</>}
+                                <span>·</span><span>{pm.servings}×</span>
+                                {pm.status === "cooked" && (
+                                  <>
+                                    <span>·</span>
+                                    <span className="text-accent-ink font-semibold">Cooked</span>
+                                  </>
+                                )}
+                                {pm.status === "skipped" && (
+                                  <>
+                                    <span>·</span>
+                                    <span className="text-ink-3 font-semibold">Skipped</span>
+                                  </>
+                                )}
+                              </div>
+                            </button>
+                          ))
                         )}
                       </div>
                     );
@@ -470,7 +473,7 @@ export default function Planner() {
           onChange={(patch) => updatePm(editing, patch)}
           onSwap={() => setPicker({ mode: "swap", day: editing.day as DayKey, slot: editing.mealSlot as Slot, plannedId: editing.id })}
           onRemove={() => removePm(editing)}
-          onOpenRecipe={() => navigate(`/recipes/${editing.meal.id}`)}
+          onOpenRecipe={() => navigate(`/recipes/${editing.meal.id}`, { state: { from: "/planner" } })}
           onClose={() => setEditing(null)}
           onCookedRequested={() => {
             if (!effectiveViewedPlan) return;
