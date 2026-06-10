@@ -228,8 +228,8 @@ export default function AddToPlanModal({ meal, onClose, onAdded }: Props) {
                   })}
                 </div>
                 {occupantHere ? (
-                  <div className="mt-1.5 text-[11.5px] text-warn-ink">
-                    Already has <span className="font-medium">{occupantHere.meal.name}</span> in this slot. Confirming will add a second meal.
+                  <div className="mt-1.5 text-[11.5px] text-ink-3">
+                    <span className="font-medium">{occupantHere.meal.name}</span> is already planned here — this will be added alongside it.
                   </div>
                 ) : (
                   <div className="mt-1.5 text-[11.5px] text-ink-3">Slot is open.</div>
