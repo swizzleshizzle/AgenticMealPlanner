@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Clock, Users, Flame, Leaf, GitBranch } from "lucide-react";
 import type { Meal } from "../api/meals";
 import Pill from "./ui/Pill";
@@ -16,10 +16,12 @@ interface Props {
 export default function MealCard({ meal, photos = true, compact = false, to }: Props) {
   const tone = toneForMeal(meal);
   const totalTime = (meal.prepTime || 0) + (meal.cookTime || 0);
+  const { pathname } = useLocation();
 
   return (
     <Link
       to={to ?? `/recipes/${meal.id}`}
+      state={{ from: pathname }}
       className="flex flex-col bg-surface-1 border border-line rounded-[14px] overflow-hidden text-left shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-[2px] transition motion-reduce:transition-none"
     >
       {photos && (
