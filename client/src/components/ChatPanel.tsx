@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { usePersistentState } from "../hooks/usePersistentState";
 import { useLocation } from "react-router-dom";
 import { Sparkles, Send } from "lucide-react";
 import { sendMessageStream } from "../api/chat";
@@ -36,7 +37,7 @@ const GREETING_ID = "greeting";
 
 export default function ChatPanel() {
   const location = useLocation();
-  const [messages, setMessages] = useState<Message[]>([
+  const [messages, setMessages] = usePersistentState<Message[]>("chat:messages", [
     {
       id: GREETING_ID,
       role: "assistant",
