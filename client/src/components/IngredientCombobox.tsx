@@ -27,9 +27,17 @@ export default function IngredientCombobox({
   const rootRef = useRef<HTMLDivElement>(null);
 
   // Re-sync display when the match changes from outside (pick/clear).
+  // Deps are the match id only: this relies on the parent nulling the match on
+  // every keystroke (onText), so same-ingredient re-picks still edge the id
+  // through undefined. If the parent ever stops doing that, resync breaks.
   useEffect(() => {
     setText(matchedIngredient?.name ?? parsedName);
   }, [matchedIngredient?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Close the dropdown if the row becomes disabled mid-interaction.
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
 
   const results = useMemo(
     () => (open ? filterIngredients(text, ingredients) : []),
@@ -53,12 +61,18 @@ export default function IngredientCombobox({
           value={text}
           disabled={disabled}
           onFocus={() => setOpen(true)}
+          onClick={() => setOpen(true)}
           onChange={(e) => {
             setText(e.target.value);
             setOpen(true);
             onText(e.target.value); // typing always means: free text, match cleared
           }}
-          onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && open) {
+              e.stopPropagation();
+              setOpen(false);
+            }
+          }}
           className={`h-8 w-full min-w-0 rounded-[8px] border px-2 text-[12.5px] text-ink-1 focus:outline-none focus:border-accent disabled:opacity-50 ${
             matchedIngredient
               ? lowConfidence
