@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X, Upload, Receipt as ReceiptIcon, ClipboardPaste, ChevronDown, ChevronRight, Plus } from "lucide-react";
+import { X, Upload, Receipt as ReceiptIcon, ClipboardPaste, ChevronDown, ChevronRight } from "lucide-react";
 import { commitReceipt, parseReceipt, type CommitItemEdit, type ParseResult, type ParsedReceiptItem } from "../api/receipts";
 import { getIngredients, type Ingredient } from "../api/ingredients";
+import { recomputeExpiration } from "../lib/ingredientSearch";
+import IngredientCombobox from "./IngredientCombobox";
 import Button from "./ui/Button";
 
 type Stage = "upload" | "parsing" | "review" | "error";
@@ -207,8 +209,7 @@ const RECEIPT_ROW_GRID =
   "md:grid md:grid-cols-[28px_minmax(0,1fr)_72px_72px_104px_136px_72px] md:items-center md:gap-2";
 
 interface RowState extends CommitItemEdit {
-  // Mirror of the parsed item, plus a UI-only flag for the inline create mini-form.
-  showCreateForm: boolean;
+  // Mirror of the parsed item, plus UI-only match-display fields.
   matchedIngredientName?: string | null;
   matchConfidence?: "high" | "low" | null;
 }
@@ -227,7 +228,6 @@ function buildInitialRows(items: ParsedReceiptItem[], ingredients: Ingredient[])
     locationGuess: it.locationGuess ?? "pantry",
     expirationDate: it.suggestedExpiration ?? null,
     isCommitted: it.kind === "food",
-    showCreateForm: false,
     matchedIngredientName: it.ingredientId != null ? ingById.get(it.ingredientId) ?? null : null,
     matchConfidence: it.matchConfidence ?? null,
   }));
@@ -272,11 +272,40 @@ function ReviewStage({
     setRows((prev) => prev.map((r) => (r.index === index ? { ...r, ...patch } : r)));
   };
 
+  const pickIngredient = (index: number, ing: Ingredient) => {
+    const row = rows.find((r) => r.index === index);
+    updateRow(index, {
+      ingredientId: ing.id,
+      matchedIngredientName: ing.name,
+      matchConfidence: "high", // manual pick is trusted
+      expirationDate: recomputeExpiration(tripDate, row?.locationGuess ?? null, ing),
+      // parsedName intentionally untouched — last typed/parsed text is kept for history
+    });
+  };
+
+  const setRowText = (index: number, text: string) => {
+    updateRow(index, { parsedName: text, ingredientId: null, matchedIngredientName: null, matchConfidence: null });
+  };
+
+  const clearMatch = (index: number) => {
+    updateRow(index, { ingredientId: null, matchedIngredientName: null, matchConfidence: null });
+  };
+
+  const setRowLocation = (index: number, location: "fridge" | "freezer" | "pantry") => {
+    const row = rows.find((r) => r.index === index);
+    const ing = row?.ingredientId != null ? ingredients.find((i) => i.id === row.ingredientId) : undefined;
+    updateRow(index, {
+      locationGuess: location,
+      // Recompute only while matched (spec): otherwise leave the date alone.
+      ...(ing ? { expirationDate: recomputeExpiration(tripDate, location, ing) } : {}),
+    });
+  };
+
   const submit = async () => {
     setCommitting(true);
     setError(null);
     try {
-      const items: CommitItemEdit[] = rows.map(({ showCreateForm, matchedIngredientName, matchConfidence, ...rest }) => rest);
+      const items: CommitItemEdit[] = rows.map(({ matchedIngredientName, matchConfidence, ...rest }) => rest);
       await commitReceipt({
         parseId: parseResult.parseId,
         store,
@@ -346,6 +375,10 @@ function ReviewStage({
                 ingredients={ingredients}
                 disabled={committing}
                 onPatch={(patch) => updateRow(row.index, patch)}
+                onPick={(ing) => pickIngredient(row.index, ing)}
+                onText={(text) => setRowText(row.index, text)}
+                onClearMatch={() => clearMatch(row.index)}
+                onLocation={(loc) => setRowLocation(row.index, loc)}
               />
             ))}
             {foodRows.length === 0 && (
@@ -394,12 +427,16 @@ function ReviewStage({
 }
 
 function RowEditor({
-  row, ingredients, disabled, onPatch,
+  row, ingredients, disabled, onPatch, onPick, onText, onClearMatch, onLocation,
 }: {
   row: RowState;
   ingredients: Ingredient[];
   disabled: boolean;
   onPatch: (patch: Partial<RowState>) => void;
+  onPick: (ing: Ingredient) => void;
+  onText: (text: string) => void;
+  onClearMatch: () => void;
+  onLocation: (loc: "fridge" | "freezer" | "pantry") => void;
 }) {
   return (
     <li
@@ -415,32 +452,20 @@ function RowEditor({
 
       {/* Ingredient match cell */}
       <div className="min-w-0">
-        {row.ingredientId != null ? (
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span
-              className={`inline-flex items-center px-2 py-0.5 rounded-[6px] text-[11.5px] font-medium shrink-0 ${
-                row.matchConfidence === "low"
-                  ? "bg-warn-soft text-warn-ink border border-warn-line"
-                  : "bg-accent-soft text-accent-ink border border-accent-line"
-              }`}
-            >
-              {row.matchedIngredientName ?? `#${row.ingredientId}`}
-            </span>
-            <span className="text-[11px] text-ink-3 truncate" title={row.parsedName}>
-              {row.parsedName}
-            </span>
-          </div>
-        ) : (
-          <button
-            onClick={() => onPatch({ showCreateForm: !row.showCreateForm })}
-            disabled={disabled}
-            title={`Create "${row.parsedName}"`}
-            className="flex items-center gap-1 max-w-full min-w-0 text-[12px] text-accent-ink hover:underline"
-          >
-            <Plus size={12} className="shrink-0" />
-            <span className="truncate">Create &ldquo;{row.parsedName}&rdquo;</span>
-          </button>
-        )}
+        <IngredientCombobox
+          matchedIngredient={
+            row.ingredientId != null
+              ? { id: row.ingredientId, name: row.matchedIngredientName ?? `#${row.ingredientId}` }
+              : null
+          }
+          lowConfidence={row.matchConfidence === "low"}
+          parsedName={row.parsedName}
+          ingredients={ingredients}
+          disabled={disabled || !row.isCommitted}
+          onPick={onPick}
+          onText={onText}
+          onClear={onClearMatch}
+        />
       </div>
 
       <input
@@ -461,7 +486,7 @@ function RowEditor({
       <select
         value={row.locationGuess ?? "pantry"}
         disabled={disabled || !row.isCommitted}
-        onChange={(e) => onPatch({ locationGuess: e.target.value as any })}
+        onChange={(e) => onLocation(e.target.value as "fridge" | "freezer" | "pantry")}
         className="h-8 md:w-full rounded-[8px] border border-line bg-surface-1 px-2 text-[12.5px] text-ink-1 capitalize focus:outline-none focus:border-accent disabled:opacity-50"
       >
         {LOCATIONS.map((l) => <option key={l} value={l}>{l}</option>)}
@@ -477,27 +502,20 @@ function RowEditor({
         {row.price != null ? `$${row.price.toFixed(2)}` : "—"}
       </span>
 
-      {row.showCreateForm && row.ingredientId == null && (
-        <div className="col-span-full mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <Field label="Name">
-            <input
-              value={row.parsedName}
-              onChange={(e) => onPatch({ parsedName: e.target.value })}
-              className="h-8 rounded-[8px] border border-line bg-surface-1 px-2 text-[12.5px] text-ink-1 focus:outline-none focus:border-accent"
-            />
-          </Field>
-          <Field label="Category">
-            <select
-              value={row.categoryGuess ?? "other"}
-              onChange={(e) => onPatch({ categoryGuess: e.target.value as any })}
-              className="h-8 rounded-[8px] border border-line bg-surface-1 px-2 text-[12.5px] text-ink-1 focus:outline-none focus:border-accent"
-            >
-              {CATEGORIES.map((c) => <option key={c} value={c}>{c.replace("_", " ")}</option>)}
-            </select>
-          </Field>
-          <div className="text-[11px] text-ink-3 self-end pb-1">
-            On commit, a new ingredient will be created with these values + unit &ldquo;{row.unit}&rdquo;.
-          </div>
+      {row.ingredientId == null && row.isCommitted && (
+        <div className="col-span-full mt-1.5 flex items-center gap-2">
+          <span className="text-[11px] text-ink-3 shrink-0">New ingredient category:</span>
+          <select
+            value={row.categoryGuess ?? "other"}
+            disabled={disabled}
+            onChange={(e) => onPatch({ categoryGuess: e.target.value as any })}
+            className="h-7 rounded-[8px] border border-line bg-surface-1 px-2 text-[12px] text-ink-1 focus:outline-none focus:border-accent"
+          >
+            {CATEGORIES.map((c) => <option key={c} value={c}>{c.replace("_", " ")}</option>)}
+          </select>
+          <span className="text-[10.5px] text-ink-3 truncate">
+            created on commit with unit &ldquo;{row.unit}&rdquo;
+          </span>
         </div>
       )}
     </li>
