@@ -260,6 +260,9 @@ function ReviewStage({
   const foodRows = useMemo(() => rows.filter((r) => r.kind === "food"), [rows]);
   const nonFoodRows = useMemo(() => rows.filter((r) => r.kind !== "food"), [rows]);
   const committedFoodCount = foodRows.filter((r) => r.isCommitted).length;
+  const blankNameCount = foodRows.filter(
+    (r) => r.isCommitted && r.ingredientId == null && !r.parsedName.trim(),
+  ).length;
   const liveTotal = useMemo(
     () =>
       rows
@@ -417,8 +420,13 @@ function ReviewStage({
       </div>
 
       <div className="flex items-center justify-end gap-2 px-4 sm:px-5 py-3 border-t border-line-soft bg-surface-2">
+        {blankNameCount > 0 && (
+          <span className="text-[11px] text-warn-ink mr-auto">
+            {blankNameCount} selected item{blankNameCount === 1 ? " needs" : "s need"} a name
+          </span>
+        )}
         <Button variant="ghost" size="sm" disabled={committing} onClick={onCancel}>Cancel</Button>
-        <Button variant="primary" size="sm" disabled={committing || committedFoodCount === 0} onClick={submit}>
+        <Button variant="primary" size="sm" disabled={committing || committedFoodCount === 0 || blankNameCount > 0} onClick={submit}>
           {committing ? "Committing…" : `Commit ${committedFoodCount} item${committedFoodCount === 1 ? "" : "s"} to Pantry`}
         </Button>
       </div>
@@ -455,7 +463,7 @@ function RowEditor({
         <IngredientCombobox
           matchedIngredient={
             row.ingredientId != null
-              ? { id: row.ingredientId, name: row.matchedIngredientName ?? `#${row.ingredientId}` }
+              ? { id: row.ingredientId, name: row.matchedIngredientName ?? row.parsedName }
               : null
           }
           lowConfidence={row.matchConfidence === "low"}

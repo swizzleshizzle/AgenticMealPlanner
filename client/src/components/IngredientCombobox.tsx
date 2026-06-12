@@ -109,7 +109,7 @@ export default function IngredientCombobox({
         </div>
       )}
 
-      {!matchedIngredient && (
+      {!matchedIngredient && !disabled && (
         <div className="text-[10.5px] text-ink-3 mt-0.5 truncate">
           will create &ldquo;{text || parsedName}&rdquo;
         </div>
