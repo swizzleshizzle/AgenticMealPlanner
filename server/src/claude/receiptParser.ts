@@ -1,6 +1,8 @@
 import { callClaudeViaSdk } from "./sdkClient.js";
 import path from "path";
+import { unlink } from "fs/promises";
 import type { ParsedReceiptPayload } from "../services/receiptParseSessions.js";
+import { tileImageIfTall } from "../services/imageTiling.js";
 
 export type ReceiptParseInput =
   | { kind: "photo"; path: string }
@@ -28,7 +30,32 @@ const SCHEMA_BLOCK = `{
   ]
 }`;
 
-export function buildFirstPassPrompt(input: ReceiptParseInput): string {
+/**
+ * Thrown when a photo/PDF parse comes back schema-valid but with zero items —
+ * which in practice means the model could not read the image, not that the
+ * receipt was empty. Surfaced to the client as a 422 instead of a silent
+ * empty review screen.
+ */
+export class EmptyParseError extends Error {
+  constructor() {
+    super(
+      "Could not read any line items from the image. Try a clearer photo, splitting a long screenshot, or pasting the order text instead.",
+    );
+    this.name = "EmptyParseError";
+  }
+}
+
+export function ensureParsedItems(
+  parsed: ParsedReceiptPayload,
+  kind: ReceiptParseInput["kind"],
+): void {
+  if (kind === "text") return;
+  if (!Array.isArray(parsed.items) || parsed.items.length === 0) {
+    throw new EmptyParseError();
+  }
+}
+
+export function buildFirstPassPrompt(input: ReceiptParseInput, tilePaths?: string[]): string {
   if (input.kind === "text") {
     return `Read this digital grocery order text and extract structured data.
 
@@ -43,6 +70,26 @@ ${SCHEMA_BLOCK}
 
 Notes:
 - Skip non-item lines (subtotal, tax, total, store address, payment lines).
+- 'kind' = 'non_food' for clearly non-edible items (paper towels, batteries, plastic bags); 'unknown' if you can't tell.
+- If the receipt shows a per-pound price (e.g., '0.35 lb @ $0.59/lb $0.21'), quantity is 0.35 and unit is 'lb'.
+- If a line has no unit, use 'count' and quantity 1.`;
+  }
+
+  if (tilePaths && tilePaths.length > 1) {
+    const tileList = tilePaths.map((p, i) => `  ${i + 1}. ${p}`).join("\n");
+    return `A single tall grocery receipt image has been sliced into ${tilePaths.length} files, in top-to-bottom order. Read each one in order:
+
+${tileList}
+
+Consecutive slices overlap vertically by a small margin, so a line item may appear at the bottom of one slice and again at the top of the next — include each such item only ONCE.
+
+Extract all line items across all slices and return ONLY valid JSON matching this exact schema — no markdown, no explanation:
+
+${SCHEMA_BLOCK}
+
+Notes:
+- Skip non-item lines (subtotal, tax, total, store address, payment lines).
+- Aldi paper receipts use heavy abbreviations (ORG, WHL, SPNCH); expand them in 'parsedName'.
 - 'kind' = 'non_food' for clearly non-edible items (paper towels, batteries, plastic bags); 'unknown' if you can't tell.
 - If the receipt shows a per-pound price (e.g., '0.35 lb @ $0.59/lb $0.21'), quantity is 0.35 and unit is 'lb'.
 - If a line has no unit, use 'count' and quantity 1.`;
@@ -100,22 +147,40 @@ export function extractJson(raw: string): string | null {
 }
 
 export async function runFirstPass(input: ReceiptParseInput): Promise<ParsedReceiptPayload> {
-  const prompt = buildFirstPassPrompt(input);
-  const args: Parameters<typeof callClaudeViaSdk>[0] = {
-    userPrompt: prompt,
-    timeoutMs: 300_000,
-  };
-  if (input.kind !== "text") {
-    args.allowedTools = ["Read"];
-    args.additionalDirectories = [path.dirname(path.resolve(input.path))];
+  let tilePaths: string[] | null = null;
+  if (input.kind === "photo") {
+    try {
+      tilePaths = await tileImageIfTall(input.path);
+    } catch (err) {
+      // Tiling is best-effort; an unreadable/exotic image falls back to the
+      // single-image path and the empty-items guard catches a failed OCR.
+      console.warn("[receiptParser] tiling failed, using original image", err);
+    }
   }
-  const raw = await callClaudeViaSdk(args);
-  const jsonText = extractJson(raw);
-  if (!jsonText) {
-    throw new Error("Claude returned no parseable JSON for the first pass");
+
+  try {
+    const prompt = buildFirstPassPrompt(input, tilePaths ?? undefined);
+    const args: Parameters<typeof callClaudeViaSdk>[0] = {
+      userPrompt: prompt,
+      timeoutMs: 300_000,
+    };
+    if (input.kind !== "text") {
+      args.allowedTools = ["Read"];
+      args.additionalDirectories = [path.dirname(path.resolve(input.path))];
+    }
+    const raw = await callClaudeViaSdk(args);
+    const jsonText = extractJson(raw);
+    if (!jsonText) {
+      throw new Error("Claude returned no parseable JSON for the first pass");
+    }
+    const parsed = JSON.parse(jsonText) as ParsedReceiptPayload;
+    ensureParsedItems(parsed, input.kind);
+    return parsed;
+  } finally {
+    for (const tp of tilePaths ?? []) {
+      await unlink(tp).catch(() => {});
+    }
   }
-  const parsed = JSON.parse(jsonText) as ParsedReceiptPayload;
-  return parsed;
 }
 
 export async function runRescuePass(

@@ -6,6 +6,8 @@ import path from "path";
 const router = Router();
 
 router.post("/parse", upload.single("file"), async (req, res) => {
+  const startedAt = Date.now();
+  let kind = "unknown";
   try {
     const text = typeof req.body.text === "string" ? req.body.text.trim() : "";
     if (!req.file && !text) {
@@ -14,19 +16,27 @@ router.post("/parse", upload.single("file"), async (req, res) => {
 
     let result;
     if (text) {
+      kind = "text";
       result = await receiptService.parseReceipt({ kind: "text", text });
     } else if (req.file) {
       const ext = path.extname(req.file.originalname).toLowerCase();
-      const kind = ext === ".pdf" ? "pdf" : "photo";
-      result = await receiptService.parseReceipt({ kind, path: req.file.path });
+      kind = ext === ".pdf" ? "pdf" : "photo";
+      result = await receiptService.parseReceipt({ kind: kind as "pdf" | "photo", path: req.file.path });
     } else {
       return res.status(400).json({ error: "Unreachable" });
     }
 
+    console.log(
+      `[receipts/parse] ok kind=${kind} store=${result.payload.store} items=${result.payload.items.length} in ${Date.now() - startedAt}ms`,
+    );
     res.json(result);
   } catch (err: any) {
-    console.error("[receipts/parse] failed", err);
-    res.status(500).json({ error: "Failed to parse receipt", details: err.message });
+    const status = err?.name === "EmptyParseError" ? 422 : 500;
+    console.error(
+      `[receipts/parse] failed kind=${kind} status=${status} in ${Date.now() - startedAt}ms`,
+      err,
+    );
+    res.status(status).json({ error: err.message ?? "Failed to parse receipt" });
   }
 });
 

@@ -2,9 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   buildFirstPassPrompt,
   buildRescuePrompt,
+  ensureParsedItems,
+  EmptyParseError,
   extractJson,
   type ReceiptParseInput,
 } from "../claude/receiptParser.js";
+import type { ParsedReceiptPayload } from "../services/receiptParseSessions.js";
 
 describe("buildFirstPassPrompt", () => {
   it("photo input includes the file path and instructs use of Read", () => {
@@ -29,6 +32,46 @@ describe("buildFirstPassPrompt", () => {
     const input: ReceiptParseInput = { kind: "pdf", path: "/tmp/walmart.pdf" };
     const prompt = buildFirstPassPrompt(input);
     expect(prompt).toContain("/tmp/walmart.pdf");
+  });
+
+  it("with tile paths, lists every tile in order and instructs overlap dedupe", () => {
+    const input: ReceiptParseInput = { kind: "photo", path: "/tmp/order.png" };
+    const tiles = ["/tmp/order.tile0.png", "/tmp/order.tile1.png", "/tmp/order.tile2.png"];
+    const prompt = buildFirstPassPrompt(input, tiles);
+    for (const t of tiles) expect(prompt).toContain(t);
+    // Tiles listed top-to-bottom, original path not referenced.
+    expect(prompt.indexOf(tiles[0])).toBeLessThan(prompt.indexOf(tiles[1]));
+    expect(prompt.indexOf(tiles[1])).toBeLessThan(prompt.indexOf(tiles[2]));
+    expect(prompt).not.toContain("/tmp/order.png\n");
+    expect(prompt).toMatch(/overlap/i);
+    expect(prompt).toMatch(/duplicate|dedupe|once/i);
+    expect(prompt).toMatch(/JSON/);
+  });
+});
+
+describe("ensureParsedItems", () => {
+  const emptyPayload = { store: "unknown", tripDate: "2026-06-11", total: 0, items: [] } as unknown as ParsedReceiptPayload;
+  const fullPayload = {
+    store: "Walmart",
+    tripDate: "2026-06-09",
+    total: 42,
+    items: [{ rawName: "GV RICE 5LB", parsedName: "rice", quantity: 5, unit: "lb", kind: "food" }],
+  } as unknown as ParsedReceiptPayload;
+
+  it("throws EmptyParseError when a photo parse yields zero items", () => {
+    expect(() => ensureParsedItems(emptyPayload, "photo")).toThrow(EmptyParseError);
+  });
+
+  it("throws EmptyParseError when a pdf parse yields zero items", () => {
+    expect(() => ensureParsedItems(emptyPayload, "pdf")).toThrow(EmptyParseError);
+  });
+
+  it("does not throw for a text parse with zero items", () => {
+    expect(() => ensureParsedItems(emptyPayload, "text")).not.toThrow();
+  });
+
+  it("does not throw when items are present", () => {
+    expect(() => ensureParsedItems(fullPayload, "photo")).not.toThrow();
   });
 });
 
