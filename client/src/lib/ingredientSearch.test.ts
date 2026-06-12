@@ -1,9 +1,9 @@
-// client/src/components/__tests__/ingredientSearch.test.ts
+// client/src/lib/ingredientSearch.test.ts
 import { describe, it, expect } from "vitest";
-import { filterIngredients, recomputeExpiration } from "../ingredientSearch";
-import type { Ingredient } from "../../api/ingredients";
+import { filterIngredients, recomputeExpiration } from "./ingredientSearch";
+import type { Ingredient } from "../api/ingredients";
 
-const ing = (id: number, name: string, shelf?: Partial<Ingredient>): Ingredient => ({
+const ing = (id: number, name: string, overrides?: Partial<Ingredient>): Ingredient => ({
   id,
   name,
   category: "other",
@@ -17,7 +17,7 @@ const ing = (id: number, name: string, shelf?: Partial<Ingredient>): Ingredient 
   lowStockThreshold: null,
   lowStockUnit: null,
   isOneOff: false,
-  ...shelf,
+  ...overrides,
 });
 
 const PANTRY: Ingredient[] = [
@@ -55,8 +55,9 @@ describe("filterIngredients", () => {
     expect(names[0]).toBe("rice");
   });
 
-  it("caps results at 12", () => {
-    expect(filterIngredients("", PANTRY).length).toBeLessThanOrEqual(12);
+  it("caps fuzzy results at 12 even when more ingredients match", () => {
+    const milks = Array.from({ length: 14 }, (_, i) => ing(100 + i, `milk ${i + 1}`));
+    expect(filterIngredients("milk", milks)).toHaveLength(12);
   });
 
   it("returns empty array when nothing is close", () => {
@@ -81,6 +82,11 @@ describe("recomputeExpiration", () => {
 
   it("returns null when the ingredient has no shelf life for that location", () => {
     expect(recomputeExpiration("2026-06-08", "pantry", milk)).toBeNull();
+  });
+
+  it("adds the pantry shelf life to the trip date", () => {
+    const rice = ing(20, "rice", { shelfLifePantryDays: 30 });
+    expect(recomputeExpiration("2026-06-08", "pantry", rice)).toBe("2026-07-08");
   });
 
   it("returns null for a null location", () => {
