@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import type { Ingredient } from "../api/ingredients";
-import { filterIngredients } from "../lib/ingredientSearch";
+import { filterIngredients, makeIngredientFuse } from "../lib/ingredientSearch";
 
 interface Props {
   /** Current match, or null when the row will create a new ingredient. */
@@ -24,7 +24,9 @@ export default function IngredientCombobox({
   // Display text: matched name when matched, parsedName when not.
   const [text, setText] = useState(matchedIngredient?.name ?? parsedName);
   const [open, setOpen] = useState(false);
+  const [highlighted, setHighlighted] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
+  const listId = useId();
 
   // Re-sync display when the match changes from outside (pick/clear).
   // Deps are the match id only: this relies on the parent nulling the match on
@@ -39,10 +41,16 @@ export default function IngredientCombobox({
     if (disabled) setOpen(false);
   }, [disabled]);
 
+  // Rebuild the Fuse index only when the ingredient list changes — not on every
+  // keystroke (this combobox is rendered once per receipt row).
+  const fuse = useMemo(() => makeIngredientFuse(ingredients), [ingredients]);
   const results = useMemo(
-    () => (open ? filterIngredients(text, ingredients) : []),
-    [open, text, ingredients],
+    () => (open ? filterIngredients(text, ingredients, fuse) : []),
+    [open, text, ingredients, fuse],
   );
+
+  // Reset the active option whenever the result set changes.
+  useEffect(() => { setHighlighted(0); }, [text, open]);
 
   // Close the dropdown on outside click.
   useEffect(() => {
@@ -54,12 +62,47 @@ export default function IngredientCombobox({
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
 
+  const pick = (i: Ingredient) => { onPick(i); setOpen(false); };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape" && open) {
+      e.stopPropagation();
+      setOpen(false);
+      return;
+    }
+    if (!open) {
+      if (e.key === "ArrowDown") setOpen(true);
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlighted((h) => Math.min(h + 1, Math.max(0, results.length - 1)));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlighted((h) => Math.max(h - 1, 0));
+    } else if (e.key === "Enter") {
+      const choice = results[highlighted];
+      if (choice) {
+        e.preventDefault();
+        pick(choice);
+      }
+    }
+  };
+
+  const showList = open && results.length > 0;
+  const activeId = showList && results[highlighted] ? `${listId}-opt-${results[highlighted].id}` : undefined;
+
   return (
     <div ref={rootRef} className="relative min-w-0">
       <div className="flex items-center gap-1">
         <input
           value={text}
           disabled={disabled}
+          role="combobox"
+          aria-expanded={open}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          aria-activedescendant={activeId}
           onFocus={() => setOpen(true)}
           onClick={() => setOpen(true)}
           onChange={(e) => {
@@ -67,12 +110,7 @@ export default function IngredientCombobox({
             setOpen(true);
             onText(e.target.value); // typing always means: free text, match cleared
           }}
-          onKeyDown={(e) => {
-            if (e.key === "Escape" && open) {
-              e.stopPropagation();
-              setOpen(false);
-            }
-          }}
+          onKeyDown={onKeyDown}
           className={`h-8 w-full min-w-0 rounded-[8px] border px-2 text-[12.5px] text-ink-1 focus:outline-none focus:border-accent disabled:opacity-50 ${
             matchedIngredient
               ? lowConfidence
@@ -86,6 +124,7 @@ export default function IngredientCombobox({
             type="button"
             onClick={onClear}
             title="Clear match"
+            aria-label="Clear match"
             className="shrink-0 w-5 h-5 grid place-items-center rounded-[4px] text-ink-3 hover:text-ink-1 hover:bg-surface-2"
           >
             <X size={12} />
@@ -93,15 +132,25 @@ export default function IngredientCombobox({
         )}
       </div>
 
-      {open && results.length > 0 && (
-        <div className="absolute z-20 mt-1 left-0 right-0 max-h-[180px] overflow-y-auto rounded-[8px] border border-line bg-surface-1 shadow-lg flex flex-col p-1">
-          {results.map((i) => (
+      {showList && (
+        <div
+          id={listId}
+          role="listbox"
+          className="absolute z-20 mt-1 left-0 right-0 max-h-[180px] overflow-y-auto rounded-[8px] border border-line bg-surface-1 shadow-lg flex flex-col p-1"
+        >
+          {results.map((i, idx) => (
             <button
               key={i.id}
+              id={`${listId}-opt-${i.id}`}
+              role="option"
+              aria-selected={idx === highlighted}
               type="button"
               onMouseDown={(e) => e.preventDefault() /* keep input focus */}
-              onClick={() => { onPick(i); setOpen(false); }}
-              className="text-left px-2 py-1.5 text-[12.5px] text-ink-1 hover:bg-surface-2 rounded-[4px]"
+              onMouseEnter={() => setHighlighted(idx)}
+              onClick={() => pick(i)}
+              className={`text-left px-2 py-1.5 text-[12.5px] text-ink-1 rounded-[4px] ${
+                idx === highlighted ? "bg-surface-2" : "hover:bg-surface-2"
+              }`}
             >
               {i.name}
             </button>
