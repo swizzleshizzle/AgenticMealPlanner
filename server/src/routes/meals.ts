@@ -4,9 +4,7 @@ import { upload, uploadImage, uploadPdfOnly } from "../middleware/upload.js";
 import { parseRecipeFromFile } from "../claude/recipeParser.js";
 import { stashImportPdf, popImportPdf } from "../services/importSessions.js";
 import { resolveOrCreateIngredientId } from "../services/ingredientResolve.js";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "../lib/prisma.js";
 
 const router = Router();
 

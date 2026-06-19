@@ -124,9 +124,14 @@ const consumePantryBatchTool: ToolDef = {
 const deletePantryBatchTool: ToolDef = {
   name: "delete_pantry_batch",
   description:
-    "Permanently delete a pantry batch (hard delete; not reversible). Prefer consume_pantry_batch in most cases. Use only when the user explicitly wants to remove a batch that was created in error.",
-  schema: z.object({ batchId: z.number().int() }),
+    "Permanently delete a pantry batch (hard delete; NOT reversible). Prefer consume_pantry_batch in most cases. Requires explicit user confirmation: call once, surface the consequence to the user, then re-call with confirmed: true.",
+  schema: z.object({ batchId: z.number().int(), confirmed: z.boolean().optional() }),
   handler: async (input) => {
+    if (input.confirmed !== true) {
+      throw new Error(
+        "delete_pantry_batch is irreversible and requires confirmation. Ask the user to confirm, then re-call with confirmed: true.",
+      );
+    }
     await hardDeleteBatch(input.batchId);
     return { deletedId: input.batchId };
   },

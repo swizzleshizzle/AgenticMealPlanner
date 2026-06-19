@@ -1,11 +1,16 @@
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import * as shoppingService from "../services/shoppingService.js";
+import { parseId } from "./_validation.js";
 
 const router = Router();
 
 router.post("/generate/:planId", async (req, res) => {
-  const items = await shoppingService.generateShoppingList(Number(req.params.planId));
+  // Guard the id: generateShoppingList runs a deleteMany on planId first, so a
+  // NaN here would issue `deleteMany({ where: { planId: NaN }})`.
+  const planId = parseId(req.params.planId, res, "plan id");
+  if (planId === null) return;
+  const items = await shoppingService.generateShoppingList(planId);
   res.status(201).json(items);
 });
 
@@ -71,12 +76,20 @@ router.delete("/custom/:id", async (req, res) => {
 });
 
 router.get("/:planId", async (req, res) => {
-  const items = await shoppingService.getShoppingList(Number(req.params.planId));
+  const planId = parseId(req.params.planId, res, "plan id");
+  if (planId === null) return;
+  const items = await shoppingService.getShoppingList(planId);
   res.json(items);
 });
 
 router.put("/item/:id", async (req, res) => {
-  const item = await shoppingService.toggleShoppingItem(Number(req.params.id), req.body.checked);
+  const id = parseId(req.params.id, res, "item id");
+  if (id === null) return;
+  if (typeof req.body?.checked !== "boolean") {
+    res.status(400).json({ error: "checked must be a boolean" });
+    return;
+  }
+  const item = await shoppingService.toggleShoppingItem(id, req.body.checked);
   res.json(item);
 });
 

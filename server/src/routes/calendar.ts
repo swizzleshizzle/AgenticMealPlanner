@@ -1,10 +1,10 @@
 import { Router } from "express";
-import { PrismaClient } from "@prisma/client";
 import * as calendarService from "../services/calendarService.js";
 import * as plannerService from "../services/plannerService.js";
+import { prisma } from "../lib/prisma.js";
+import { parseId } from "./_validation.js";
 
 const router = Router();
-const prisma = new PrismaClient();
 
 export const dayOffsets: Record<string, number> = {
   sunday: 0, monday: 1, tuesday: 2, wednesday: 3,
@@ -17,13 +17,25 @@ router.get("/auth", (_req, res) => {
 });
 
 router.get("/callback", async (req, res) => {
-  const code = req.query.code as string;
-  await calendarService.handleCallback(code);
-  res.send("Calendar connected! You can close this tab.");
+  // Google redirects here with ?error=access_denied (no code) if the user
+  // declines consent — validate before handing it to the OAuth client.
+  const code = req.query.code;
+  if (typeof code !== "string" || code.length === 0) {
+    res.status(400).send("Calendar authorization failed or was denied. You can close this tab and try again.");
+    return;
+  }
+  try {
+    await calendarService.handleCallback(code);
+    res.send("Calendar connected! You can close this tab.");
+  } catch {
+    res.status(502).send("Could not complete calendar authorization. You can close this tab and try again.");
+  }
 });
 
 router.post("/sync/:planId", async (req, res) => {
-  const plan = await plannerService.getPlanById(Number(req.params.planId));
+  const planId = parseId(req.params.planId, res, "plan id");
+  if (planId === null) return;
+  const plan = await plannerService.getPlanById(planId);
   if (!plan) {
     res.status(404).json({ error: "Plan not found" });
     return;
@@ -35,7 +47,11 @@ router.post("/sync/:planId", async (req, res) => {
   for (const pm of plan.plannedMeals) {
     const dayOffset = dayOffsets[pm.day] ?? 0;
     const mealDate = new Date(weekStart);
-    mealDate.setDate(mealDate.getDate() + dayOffset);
+    // Stay in UTC end-to-end: weekStartDate is a UTC-midnight @db.Date, so
+    // advancing with setUTCDate and reading back with toISOString keeps the
+    // calendar date correct. Mixing local setDate with UTC toISOString rolled
+    // events back a day for hosts west of UTC (code review H5).
+    mealDate.setUTCDate(mealDate.getUTCDate() + dayOffset);
     const dateStr = mealDate.toISOString().split("T")[0];
 
     const prepNote = pm.cookStyle === "batch_prep" ? " [Meal Prep]"
