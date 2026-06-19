@@ -1,15 +1,24 @@
 import multer from "multer";
 import path from "path";
 import { mkdirSync } from "fs";
+import { randomUUID } from "crypto";
 
 const uploadDir = path.join(process.cwd(), "uploads");
 mkdirSync(uploadDir, { recursive: true });
 
+/**
+ * Derive a stored filename from a random token plus the validated extension
+ * only — never embed the client-supplied basename, which could contain path
+ * separators and escape uploadDir.
+ */
+function safeFilename(originalname: string): string {
+  return `${Date.now()}-${randomUUID()}${path.extname(originalname).toLowerCase()}`;
+}
+
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadDir),
   filename: (_req, file, cb) => {
-    const uniqueName = `${Date.now()}-${file.originalname}`;
-    cb(null, uniqueName);
+    cb(null, safeFilename(file.originalname));
   },
 });
 
@@ -30,7 +39,7 @@ export const upload = multer({
 export const uploadImage = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, uploadDir),
-    filename: (_req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
+    filename: (_req, file, cb) => cb(null, safeFilename(file.originalname)),
   }),
   fileFilter: (_req, file, cb) => {
     if (/^image\/(jpeg|png|webp)$/.test(file.mimetype)) cb(null, true);
@@ -42,7 +51,7 @@ export const uploadImage = multer({
 export const uploadPdfOnly = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, uploadDir),
-    filename: (_req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
+    filename: (_req, file, cb) => cb(null, safeFilename(file.originalname)),
   }),
   fileFilter: (_req, file, cb) => {
     if (file.mimetype === "application/pdf") cb(null, true);

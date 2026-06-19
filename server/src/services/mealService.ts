@@ -1,11 +1,9 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../lib/prisma.js";
 import { copyFile, unlink, stat } from "fs/promises";
 import path from "path";
 import { ensureMealDir, mealThumbPath, mealPdfPath, relStoragePath } from "./mediaStorage.js";
 import { runThumbnailJob } from "./pdfExtraction.js";
 import { pickNextDefaultAfterArchive } from "./mealVersioning.js";
-
-const prisma = new PrismaClient();
 
 const mealWithIngredients = {
   ingredients: {

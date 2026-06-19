@@ -42,11 +42,15 @@ export async function resolveOrCreateIngredientId(
   const resolved = resolveIngredientId(line.name, existing, aliasMap);
   if (resolved) return resolved.id;
 
+  // Canonical ingredient names are stored lowercased everywhere else; lowercase
+  // here too so a differently-cased name ("Olive Oil" vs "olive oil") matches
+  // the existing unique row instead of creating a duplicate.
+  const key = line.name.toLowerCase();
   const created = await prisma.ingredient.upsert({
-    where: { name: line.name },
+    where: { name: key },
     update: {},
     create: {
-      name: line.name,
+      name: key,
       category: (line.category ?? "other") as any,
       defaultUnit: line.unit,
     },

@@ -1,6 +1,5 @@
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import type { PrismaClient } from "@prisma/client";
+import { prisma } from "../lib/prisma.js";
 
 type Tx = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
 

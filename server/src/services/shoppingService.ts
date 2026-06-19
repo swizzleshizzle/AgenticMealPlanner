@@ -1,8 +1,14 @@
-import { PrismaClient } from "@prisma/client";
 import { aggregateCards } from "./pantryAggregation.js";
 import { resolvePlannedMealForShopping, type VersionRow } from "./mealVersioning.js";
+import { convert, UnitConversionError } from "../lib/units.js";
+import { prisma } from "../lib/prisma.js";
 
-const prisma = new PrismaClient();
+export interface IngredientMeta {
+  id: number;
+  defaultUnit: string;
+  densityGPerMl?: number | null;
+  gramsPerCount?: number | null;
+}
 
 export interface AggregateInput {
   plannedMeals: Array<{
@@ -20,43 +26,98 @@ export interface AggregateInput {
   pantryItems: Array<{
     ingredientId: number;
     quantity: number;
+    unit: string;
   }>;
+  /** Per-ingredient conversion metadata (default unit + density hints). */
+  ingredients: IngredientMeta[];
 }
 
 export interface AggregateOutput {
   ingredientId: number;
+  /** Unit the quantities below are expressed in (the ingredient's default unit). */
+  unit: string;
   quantityNeeded: number;
   quantityOnHand: number;
   quantityToBuy: number;
+  /**
+   * True when at least one meal-ingredient or pantry batch could not be
+   * converted to the ingredient's default unit and was skipped from the totals
+   * (so the numbers may understate reality). Surfaced for logging/UI; not
+   * persisted (no column exists yet).
+   */
+  partial: boolean;
 }
 
 // Pure aggregation: given planned meals and pantry on-hand quantities, produce
-// the per-ingredient totals. Leftovers occurrences are excluded entirely
+// the per-ingredient totals — every quantity converted to the ingredient's
+// default unit first, so amounts in different units of the same ingredient
+// (e.g. a "1 kg" batch against a "2 cup" need) combine correctly instead of
+// being summed as bare numbers. Leftovers occurrences are excluded entirely
 // (their ingredients were already accounted for by the source batch_prep on
-// Sunday). The pantry on-hand is subtracted from the need to compute
-// quantityToBuy, clamped at zero.
+// Sunday). Pantry on-hand is subtracted from the need to compute quantityToBuy,
+// clamped at zero. Terms that can't be converted (cross-type without a density
+// hint) are skipped and flagged via `partial` rather than mis-summed.
 export function aggregateShoppingItems(input: AggregateInput): AggregateOutput[] {
+  const metaById = new Map(input.ingredients.map((i) => [i.id, i]));
+  const hintFor = (id: number) => {
+    const m = metaById.get(id);
+    return { densityGPerMl: m?.densityGPerMl ?? null, gramsPerCount: m?.gramsPerCount ?? null };
+  };
+
   const needed = new Map<number, number>();
+  const onHand = new Map<number, number>();
+  const partial = new Set<number>();
 
   for (const pm of input.plannedMeals) {
     if (pm.cookStyle === "leftovers") continue;
     const scaleFactor = pm.servings / pm.meal.servings;
     for (const mi of pm.meal.ingredients) {
-      const qty = mi.quantity * scaleFactor;
-      needed.set(mi.ingredientId, (needed.get(mi.ingredientId) ?? 0) + qty);
+      const target = metaById.get(mi.ingredientId)?.defaultUnit ?? mi.unit;
+      const raw = mi.quantity * scaleFactor;
+      try {
+        const q = convert(raw, mi.unit, target, hintFor(mi.ingredientId));
+        needed.set(mi.ingredientId, (needed.get(mi.ingredientId) ?? 0) + q);
+      } catch (e) {
+        if (e instanceof UnitConversionError) {
+          partial.add(mi.ingredientId);
+          // Keep the ingredient visible even if its only contributions were
+          // unconvertible, so a needed item is never silently dropped.
+          if (!needed.has(mi.ingredientId)) needed.set(mi.ingredientId, 0);
+        } else {
+          throw e;
+        }
+      }
     }
   }
 
-  const onHand = new Map<number, number>();
   for (const item of input.pantryItems) {
-    onHand.set(item.ingredientId, (onHand.get(item.ingredientId) ?? 0) + item.quantity);
+    if (!needed.has(item.ingredientId)) continue; // only care about needed ingredients
+    const target = metaById.get(item.ingredientId)?.defaultUnit ?? item.unit;
+    try {
+      const q = convert(item.quantity, item.unit, target, hintFor(item.ingredientId));
+      onHand.set(item.ingredientId, (onHand.get(item.ingredientId) ?? 0) + q);
+    } catch (e) {
+      if (e instanceof UnitConversionError) {
+        partial.add(item.ingredientId);
+      } else {
+        throw e;
+      }
+    }
   }
 
   const out: AggregateOutput[] = [];
   for (const [ingredientId, quantityNeeded] of needed) {
+    const target = metaById.get(ingredientId)?.defaultUnit ?? "";
     const quantityOnHand = onHand.get(ingredientId) ?? 0;
     const quantityToBuy = Math.max(0, quantityNeeded - quantityOnHand);
-    out.push({ ingredientId, quantityNeeded, quantityOnHand, quantityToBuy });
+    out.push({
+      ingredientId,
+      unit: target,
+      quantityNeeded,
+      quantityOnHand,
+      quantityToBuy,
+      partial: partial.has(ingredientId),
+    });
   }
   return out;
 }
@@ -130,10 +191,36 @@ export async function generateShoppingList(planId: number) {
 
   const pantryItems = await prisma.pantryBatch.findMany({ where: { consumedAt: null } });
 
+  // Conversion metadata for every ingredient referenced by a need or an on-hand
+  // batch, so aggregation can convert each quantity to the ingredient's unit.
+  const involvedIngredientIds = [
+    ...new Set([
+      ...statusFilteredInput.flatMap((e) => e.meal.ingredients.map((mi) => mi.ingredientId)),
+      ...pantryItems.map((p) => p.ingredientId),
+    ]),
+  ];
+  const ingredientMeta = await prisma.ingredient.findMany({
+    where: { id: { in: involvedIngredientIds } },
+    select: { id: true, defaultUnit: true, densityGPerMl: true, gramsPerCount: true },
+  });
+
   const aggregated = aggregateShoppingItems({
     plannedMeals: statusFilteredInput,
-    pantryItems: pantryItems.map((p) => ({ ingredientId: p.ingredientId, quantity: p.quantity })),
+    pantryItems: pantryItems.map((p) => ({
+      ingredientId: p.ingredientId,
+      quantity: p.quantity,
+      unit: p.unit,
+    })),
+    ingredients: ingredientMeta,
   });
+
+  const partials = aggregated.filter((a) => a.partial);
+  if (partials.length > 0) {
+    console.warn(
+      `[shopping] plan ${planId}: ${partials.length} ingredient(s) had unconvertible units; ` +
+        `totals may be incomplete (ingredientIds: ${partials.map((p) => p.ingredientId).join(", ")})`,
+    );
+  }
 
   await prisma.shoppingItem.createMany({
     data: aggregated.map((a) => ({

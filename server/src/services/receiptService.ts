@@ -1,12 +1,11 @@
-import { PrismaClient, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import type { PantryLocation } from "@prisma/client";
+import { prisma } from "../lib/prisma.js";
 import { runFirstPass, runRescuePass, type ReceiptParseInput } from "../claude/receiptParser.js";
 import { fuzzyMatchIngredient, type IngredientCandidate } from "../claude/ingredientMatcher.js";
 import { stashReceiptParse, peekReceiptParse, popReceiptParse, type ParsedReceiptPayload } from "./receiptParseSessions.js";
 import { moveSourceIntoReceipt } from "./receiptStorage.js";
 import { suggestExpirationDate } from "./pantryBatchService.js";
-
-const prisma = new PrismaClient();
 
 const RESCUE_THRESHOLD = 0.30; // > 30% weak food items triggers a rescue pass
 
