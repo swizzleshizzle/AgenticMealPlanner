@@ -1,6 +1,5 @@
-import { PrismaClient, Prisma, type PantryLocation } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { Prisma, type PantryLocation } from "@prisma/client";
+import { prisma } from "../lib/prisma.js";
 
 export interface CreateBatchInput {
   ingredientId?: number;

@@ -13,9 +13,18 @@ describe("remove_planned_meal", () => {
     const { planTools } = await import("../../../agent/tools/plan.js");
     const tool = planTools.find((t) => t.name === "remove_planned_meal")!;
     expect(tool).toBeDefined();
-    const out = await tool.handler({ plannedMealId: 42 }, { pageContext: {} });
+    const out = await tool.handler({ plannedMealId: 42, confirmed: true }, { pageContext: {} });
     expect(out).toEqual({ deletedId: 42 });
     const { removePlannedMeal } = await import("../../../services/plannerService.js");
     expect(vi.mocked(removePlannedMeal)).toHaveBeenCalledWith(42);
+  });
+
+  it("refuses to remove without confirmation", async () => {
+    const { planTools } = await import("../../../agent/tools/plan.js");
+    const tool = planTools.find((t) => t.name === "remove_planned_meal")!;
+    const { removePlannedMeal } = await import("../../../services/plannerService.js");
+    vi.mocked(removePlannedMeal).mockClear();
+    await expect(tool.handler({ plannedMealId: 42 }, { pageContext: {} })).rejects.toThrow(/confirm/i);
+    expect(vi.mocked(removePlannedMeal)).not.toHaveBeenCalled();
   });
 });

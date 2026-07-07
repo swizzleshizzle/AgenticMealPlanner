@@ -20,12 +20,18 @@ describe("generate_full_week", () => {
     const { planTools } = await import("../../../agent/tools/plan.js");
     const tool = planTools.find((t) => t.name === "generate_full_week")!;
     expect(tool).toBeDefined();
-    const out = await tool.handler({ weekStartDate: "2026-05-17" }, { pageContext: {} });
+    const out = await tool.handler({ weekStartDate: "2026-05-17", confirmed: true }, { pageContext: {} });
     expect(out.plan.id).toBe(99);
     const { prisma } = await import("../../../lib/prisma.js");
     expect(prisma.weeklyPlan.upsert).toHaveBeenCalledOnce();
     const { generateWeeklyPlan } = await import("../../../claude/mealPlanner.js");
     expect(generateWeeklyPlan).toHaveBeenCalledWith(99);
+  });
+
+  it("refuses to generate without confirmation", async () => {
+    const { planTools } = await import("../../../agent/tools/plan.js");
+    const tool = planTools.find((t) => t.name === "generate_full_week")!;
+    await expect(tool.handler({ weekStartDate: "2026-05-17" }, { pageContext: {} })).rejects.toThrow(/confirm/i);
   });
 
   it("rejects malformed weekStartDate", async () => {

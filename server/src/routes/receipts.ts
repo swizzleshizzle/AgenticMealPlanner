@@ -42,7 +42,9 @@ router.post("/", async (req, res) => {
 });
 
 router.get("/", async (req, res) => {
-  const limit = req.query.limit ? Math.min(50, Number(req.query.limit)) : 5;
+  // Clamp to [1, 50] and fall back to 5 for missing/NaN/<=0 values, so a bad
+  // ?limit can't produce `take: NaN` (Prisma 500) or a negative take.
+  const limit = Math.max(1, Math.min(50, Number(req.query.limit) || 5));
   const receipts = await receiptService.getRecentReceipts(limit);
   res.json(receipts);
 });

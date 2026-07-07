@@ -1,8 +1,7 @@
-import { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 import { aggregateCards, type PantryCard } from "./pantryAggregation.js";
 import { convert, UnitConversionError } from "../lib/units.js";
-
-const prisma = new PrismaClient();
+import { prisma } from "../lib/prisma.js";
 
 export interface PantryQuery {
   location?: "fridge" | "freezer" | "pantry";

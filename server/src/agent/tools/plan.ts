@@ -159,9 +159,14 @@ const markMealCooked: ToolDef = {
 
 const removePlannedMealTool: ToolDef = {
   name: "remove_planned_meal",
-  description: "Delete a planned-meal slot from the week's plan. Use this when the user wants to clear a slot entirely (not skip it).",
-  schema: z.object({ plannedMealId: z.number().int() }),
+  description: "Delete a planned-meal slot from the week's plan. Use this when the user wants to clear a slot entirely (not skip it). Requires explicit user confirmation: re-call with confirmed: true once the user has approved.",
+  schema: z.object({ plannedMealId: z.number().int(), confirmed: z.boolean().optional() }),
   handler: async (input) => {
+    if (input.confirmed !== true) {
+      throw new Error(
+        "remove_planned_meal deletes a slot and requires confirmation. Ask the user to confirm, then re-call with confirmed: true.",
+      );
+    }
     await removePlannedMeal(input.plannedMealId);
     return { deletedId: input.plannedMealId };
   },
@@ -193,11 +198,17 @@ const setPlanStatusTool: ToolDef = {
 const generateFullWeekTool: ToolDef = {
   name: "generate_full_week",
   description:
-    "Generate an AI-suggested full week of meals for the given Sunday-anchored week. Creates the WeeklyPlan if missing. Returns the populated plan with all planned meals. Confirm with the user before invoking — this can fill 14+ slots and is hard to undo.",
+    "Generate an AI-suggested full week of meals for the given Sunday-anchored week. Creates the WeeklyPlan if missing. Returns the populated plan with all planned meals. This can fill 14+ slots and is hard to undo, so it requires explicit user confirmation: re-call with confirmed: true once the user has approved.",
   schema: z.object({
     weekStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    confirmed: z.boolean().optional(),
   }),
   handler: async (input) => {
+    if (input.confirmed !== true) {
+      throw new Error(
+        "generate_full_week fills the whole week and is hard to undo; it requires confirmation. Ask the user to confirm, then re-call with confirmed: true.",
+      );
+    }
     const plan = await prisma.weeklyPlan.upsert({
       where: { weekStartDate: new Date(input.weekStartDate) },
       update: {},

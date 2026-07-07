@@ -57,16 +57,20 @@ router.post("/stream", async (req, res) => {
   // res "close" fires when the client drops the TCP connection (navigate
   // away, AbortController). req "close" fires as soon as the request body is
   // fully sent -- too early, before the agent finishes -- so we use res here.
+  // Aborting the controller cancels the underlying SDK query so the agent
+  // stops working (and stops mutating the DB), not just stops being written to.
+  const abortController = new AbortController();
   let disconnected = false;
-  res.on("close", () => { disconnected = true; });
+  res.on("close", () => {
+    disconnected = true;
+    abortController.abort();
+  });
 
-  // Guard: skip writing if the socket is gone; the generator itself cannot be
-  // cancelled mid-flight (known future limitation), but we stop iterating
-  // and writing as soon as we notice the client is gone.
+  // Guard: skip writing if the socket is gone.
   const send = (ev: any) => { if (!res.writableEnded) res.write(`data: ${JSON.stringify(ev)}\n\n`); };
 
   try {
-    for await (const ev of runAgentStream({ userMessage: message, pageContext: pageContext ?? {}, history: safeHistory })) {
+    for await (const ev of runAgentStream({ userMessage: message, pageContext: pageContext ?? {}, history: safeHistory, abortController })) {
       if (disconnected) break;
       send(ev);
     }

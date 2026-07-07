@@ -23,6 +23,8 @@ export interface CallClaudeViaSdkArgs {
   /** Extra directories Claude is permitted to read from. */
   additionalDirectories?: string[];
   timeoutMs?: number;
+  /** Pin a model; defaults to claude-opus-4-8. Pass claude-haiku-4-5 for cheap passes. */
+  model?: string;
 }
 
 export function stripFences(raw: string): string {
@@ -36,11 +38,16 @@ export function stripFences(raw: string): string {
 const CLAUDE_BIN = resolveClaudeBinary();
 
 export async function callClaudeViaSdk(args: CallClaudeViaSdkArgs): Promise<string> {
-  const { userPrompt, systemPrompt, allowedTools, additionalDirectories, timeoutMs } = args;
+  const { userPrompt, systemPrompt, allowedTools, additionalDirectories, timeoutMs, model } = args;
 
+  const controller = new AbortController();
   const options: any = {
     persistSession: false,
     mcpServers: {},
+    // Pin the model so one-shot parses don't drift across SDK binary upgrades.
+    model: model ?? "claude-opus-4-8",
+    // Lets the timeout branch actually cancel the underlying query.
+    abortController: controller,
   };
   if (CLAUDE_BIN !== undefined) {
     options.pathToClaudeCodeExecutable = CLAUDE_BIN;
@@ -74,13 +81,21 @@ export async function callClaudeViaSdk(args: CallClaudeViaSdkArgs): Promise<stri
     throw new Error("SDK iterator ended without a result message");
   };
 
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const raw = timeoutMs
     ? await Promise.race([
         collect(),
-        new Promise<string>((_, rej) =>
-          setTimeout(() => rej(new Error(`SDK call timed out after ${timeoutMs}ms`)), timeoutMs),
-        ),
-      ])
+        new Promise<string>((_, rej) => {
+          timer = setTimeout(() => {
+            // Cancel the underlying query so it doesn't keep running (and
+            // burning tokens) after we've given up waiting.
+            controller.abort();
+            rej(new Error(`SDK call timed out after ${timeoutMs}ms`));
+          }, timeoutMs);
+        }),
+      ]).finally(() => {
+        if (timer) clearTimeout(timer);
+      })
     : await collect();
 
   return stripFences(raw);
