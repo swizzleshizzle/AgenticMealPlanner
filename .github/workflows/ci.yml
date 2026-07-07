@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    # Postgres 16 test DB. The DB name MUST contain "mealplanner_test":
+    # server/src/__tests__/_env.test.ts asserts DATABASE_URL targets the test DB.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: mealplanner
+          POSTGRES_PASSWORD: mealplanner
+          POSTGRES_DB: mealplanner_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://mealplanner:mealplanner@localhost:5432/mealplanner_test?schema=public
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # vitest.config.ts loads server/.env.test and fails loudly if it's absent.
+      - name: Write server .env.test (CI test DB)
+        run: echo "DATABASE_URL=\"$DATABASE_URL\"" > server/.env.test
+
+      - name: Generate Prisma client
+        run: npx prisma generate --schema server/prisma/schema.prisma
+
+      - name: Apply schema to test DB
+        run: npx prisma db push --schema server/prisma/schema.prisma --skip-generate
+
+      - name: Build server (typechecks; test files excluded from emit)
+        run: npm run build --workspace=server
+
+      - name: Client tests
+        run: npm run test --workspace=client
+
+      - name: Server tests
+        run: npm run test --workspace=server

@@ -36,6 +36,8 @@ export interface RunAgentArgs {
   userMessage: string;
   pageContext: PageContext;
   history?: { role: "user" | "assistant"; content: string }[];
+  /** Abort the underlying SDK query when the caller cancels (e.g. SSE client disconnect). */
+  abortController?: AbortController;
 }
 
 // -- Date helpers -------------------------------------------------------------
@@ -121,6 +123,9 @@ export async function* runAgentStream(args: RunAgentArgs): AsyncGenerator<Stream
     prompt: promptWithHistory,
     options: {
       systemPrompt,
+      // Pin the model so quality/cost/JSON-compliance don't drift when the
+      // resolved Claude Code binary updates its default.
+      model: "claude-opus-4-8",
       // Disable all built-in Claude tools; only our MCP tools are available.
       tools: [],
       mcpServers: {
@@ -128,6 +133,9 @@ export async function* runAgentStream(args: RunAgentArgs): AsyncGenerator<Stream
       },
       // Disable session persistence for ephemeral API calls
       persistSession: false,
+      // Cancel the query (and stop in-flight DB-mutating tool work) when the
+      // caller aborts — e.g. the SSE client navigates away.
+      ...(args.abortController ? { abortController: args.abortController } : {}),
       ...(claudeBin ? { pathToClaudeCodeExecutable: claudeBin } : {}),
       // Bypass permissions for MCP tool execution (safety vetted)
       permissionMode: "bypassPermissions",

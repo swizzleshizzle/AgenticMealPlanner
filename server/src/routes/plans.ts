@@ -1,12 +1,12 @@
 import { Router } from "express";
-import { PrismaClient } from "@prisma/client";
 import * as plannerService from "../services/plannerService.js";
 import { deductIngredientsForMeal, getPantryCards, type DeductResult } from "../services/pantryService.js";
 import { buildCookPreview, type PantryCardLite, type CookPreviewInputLine } from "../services/cookPreview.js";
 import { generateWeeklyPlan } from "../claude/mealPlanner.js";
+import { prisma } from "../lib/prisma.js";
+import { parseId } from "./_validation.js";
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.get("/", async (_req, res) => {
   const plans = await plannerService.getAllPlans();
@@ -14,7 +14,9 @@ router.get("/", async (_req, res) => {
 });
 
 router.get("/:id", async (req, res) => {
-  const plan = await plannerService.getPlanById(Number(req.params.id));
+  const id = parseId(req.params.id, res, "plan id");
+  if (id === null) return;
+  const plan = await plannerService.getPlanById(id);
   if (!plan) {
     res.status(404).json({ error: "Plan not found" });
     return;
@@ -23,22 +25,32 @@ router.get("/:id", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const plan = await plannerService.createPlan(req.body.weekStartDate);
+  const weekStartDate = req.body?.weekStartDate;
+  if (typeof weekStartDate !== "string" || Number.isNaN(Date.parse(weekStartDate))) {
+    res.status(400).json({ error: "weekStartDate must be a valid date string" });
+    return;
+  }
+  const plan = await plannerService.createPlan(weekStartDate);
   res.status(201).json(plan);
 });
 
 router.put("/:id", async (req, res) => {
-  const plan = await plannerService.updatePlan(Number(req.params.id), req.body);
+  const id = parseId(req.params.id, res, "plan id");
+  if (id === null) return;
+  const plan = await plannerService.updatePlan(id, req.body);
   res.json(plan);
 });
 
 router.post("/:id/meals", async (req, res) => {
-  const planned = await plannerService.addPlannedMeal(Number(req.params.id), req.body);
+  const id = parseId(req.params.id, res, "plan id");
+  if (id === null) return;
+  const planned = await plannerService.addPlannedMeal(id, req.body);
   res.status(201).json(planned);
 });
 
 router.put("/:planId/meals/:mealId", async (req, res) => {
-  const mealId = Number(req.params.mealId);
+  const mealId = parseId(req.params.mealId, res, "meal id");
+  if (mealId === null) return;
   const isCooked = req.body.status === "cooked";
   const overrides = req.body.overrides;
 
@@ -151,12 +163,15 @@ router.post("/:planId/meals/:mealId/cook-preview", async (req, res) => {
 });
 
 router.delete("/:planId/meals/:mealId", async (req, res) => {
-  await plannerService.removePlannedMeal(Number(req.params.mealId));
+  const mealId = parseId(req.params.mealId, res, "meal id");
+  if (mealId === null) return;
+  await plannerService.removePlannedMeal(mealId);
   res.status(204).send();
 });
 
 router.post("/:id/generate", async (req, res) => {
-  const planId = Number(req.params.id);
+  const planId = parseId(req.params.id, res, "plan id");
+  if (planId === null) return;
   const plan = await plannerService.getPlanById(planId);
   if (!plan) {
     res.status(404).json({ error: "Plan not found" });

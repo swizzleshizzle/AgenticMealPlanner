@@ -40,8 +40,17 @@ describe("delete_pantry_batch", () => {
     const { pantryTools } = await import("../../../agent/tools/pantry.js");
     const tool = pantryTools.find((t) => t.name === "delete_pantry_batch")!;
     expect(tool).toBeDefined();
-    const out = await tool.handler({ batchId: 12 }, { pageContext: {} });
+    const out = await tool.handler({ batchId: 12, confirmed: true }, { pageContext: {} });
     expect(out).toEqual({ deletedId: 12 });
     expect(hardDeleteBatch).toHaveBeenCalledWith(12);
+  });
+
+  it("refuses to delete without confirmation", async () => {
+    const { hardDeleteBatch } = await import("../../../services/pantryBatchService.js");
+    (hardDeleteBatch as any).mockClear();
+    const { pantryTools } = await import("../../../agent/tools/pantry.js");
+    const tool = pantryTools.find((t) => t.name === "delete_pantry_batch")!;
+    await expect(tool.handler({ batchId: 12 }, { pageContext: {} })).rejects.toThrow(/confirm/i);
+    expect(hardDeleteBatch).not.toHaveBeenCalled();
   });
 });

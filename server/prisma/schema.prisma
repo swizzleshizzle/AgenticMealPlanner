@@ -167,6 +167,7 @@ model MealIngredient {
   ingredient Ingredient @relation(fields: [ingredientId], references: [id])
 
   @@unique([mealId, ingredientId])
+  @@index([ingredientId])
   @@map("meal_ingredients")
 }
 
@@ -190,6 +191,7 @@ model PantryBatch {
 
   @@index([ingredientId, location, consumedAt])
   @@index([consumedAt])
+  @@index([receiptItemId])
   @@map("pantry_items")
 }
 
@@ -223,6 +225,9 @@ model PlannedMeal {
   plan WeeklyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
   meal Meal       @relation(fields: [mealId], references: [id])
 
+  @@index([planId])
+  @@index([mealId])
+  @@index([planId, day, mealSlot])
   @@map("planned_meals")
 }
 
@@ -239,6 +244,7 @@ model ShoppingItem {
   ingredient Ingredient @relation(fields: [ingredientId], references: [id])
 
   @@unique([planId, ingredientId])
+  @@index([ingredientId])
   @@map("shopping_items")
 }
 
@@ -292,5 +298,7 @@ model ReceiptItem {
   ingredient    Ingredient?   @relation(fields: [ingredientId], references: [id])
   pantryBatches PantryBatch[]
 
+  @@index([receiptId])
+  @@index([ingredientId])
   @@map("receipt_items")
 }
