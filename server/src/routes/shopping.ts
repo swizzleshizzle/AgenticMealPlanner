@@ -10,8 +10,8 @@ router.post("/generate/:planId", async (req, res) => {
   // NaN here would issue `deleteMany({ where: { planId: NaN }})`.
   const planId = parseId(req.params.planId, res, "plan id");
   if (planId === null) return;
-  const items = await shoppingService.generateShoppingList(planId);
-  res.status(201).json(items);
+  const result = await shoppingService.generateShoppingList(planId);
+  res.status(201).json(result);
 });
 
 router.get("/low-stock", async (_req, res) => {
@@ -78,8 +78,8 @@ router.delete("/custom/:id", async (req, res) => {
 router.get("/:planId", async (req, res) => {
   const planId = parseId(req.params.planId, res, "plan id");
   if (planId === null) return;
-  const items = await shoppingService.getShoppingList(planId);
-  res.json(items);
+  const result = await shoppingService.getShoppingList(planId);
+  res.json(result);
 });
 
 router.put("/item/:id", async (req, res) => {
