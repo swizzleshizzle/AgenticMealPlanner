@@ -36,7 +36,7 @@ describe("aggregateShoppingItems", () => {
       pantryItems: [],
       ingredients: META,
     };
-    const result = aggregateShoppingItems(input);
+    const result = aggregateShoppingItems(input).items;
     // 1 lb (cook_fresh @ 2/2 servings) + 2 lb (batch_prep @ 4/2 servings) = 3 lb
     expect(result.find((r) => r.ingredientId === 100)?.quantityNeeded).toBe(3);
     // 0.5 cup * 1 + 0.5 cup * 2 = 1.5 cup
@@ -53,7 +53,7 @@ describe("aggregateShoppingItems", () => {
       pantryItems: [],
       ingredients: META,
     };
-    const result = aggregateShoppingItems(input);
+    const result = aggregateShoppingItems(input).items;
     expect(result.find((r) => r.ingredientId === 100)?.quantityNeeded).toBe(1);
   });
 
@@ -66,7 +66,7 @@ describe("aggregateShoppingItems", () => {
       ingredients: META,
     };
     const result = aggregateShoppingItems(input);
-    const item = result.find((r) => r.ingredientId === 100)!;
+    const item = result.items.find((r) => r.ingredientId === 100)!;
     expect(item.quantityNeeded).toBe(2);
     expect(item.quantityOnHand).toBe(0.75);
     expect(item.quantityToBuy).toBeCloseTo(1.25, 5);
@@ -78,7 +78,7 @@ describe("aggregateShoppingItems", () => {
       pantryItems: [{ ingredientId: 100, quantity: 5, unit: "lb" }],
       ingredients: META,
     };
-    const result = aggregateShoppingItems(input);
+    const result = aggregateShoppingItems(input).items;
     expect(result.find((r) => r.ingredientId === 100)?.quantityToBuy).toBe(0);
   });
 
@@ -88,7 +88,7 @@ describe("aggregateShoppingItems", () => {
       pantryItems: [],
       ingredients: META,
     };
-    expect(aggregateShoppingItems(input)).toEqual([]);
+    expect(aggregateShoppingItems(input).items).toEqual([]);
   });
 
   it("converts pantry on-hand to the ingredient's default unit before subtracting", () => {
@@ -98,7 +98,7 @@ describe("aggregateShoppingItems", () => {
       pantryItems: [{ ingredientId: 100, quantity: 8, unit: "oz" }],
       ingredients: META,
     };
-    const item = aggregateShoppingItems(input).find((r) => r.ingredientId === 100)!;
+    const item = aggregateShoppingItems(input).items.find((r) => r.ingredientId === 100)!;
     expect(item.unit).toBe("lb");
     expect(item.quantityOnHand).toBeCloseTo(0.5, 5);
     expect(item.quantityToBuy).toBeCloseTo(0.5, 5);
@@ -113,10 +113,71 @@ describe("aggregateShoppingItems", () => {
       pantryItems: [{ ingredientId: 101, quantity: 200, unit: "g" }],
       ingredients: META, // #101 has no densityGPerMl
     };
-    const item = aggregateShoppingItems(input).find((r) => r.ingredientId === 101)!;
+    const item = aggregateShoppingItems(input).items.find((r) => r.ingredientId === 101)!;
     expect(item.quantityNeeded).toBe(0.5);
     expect(item.quantityOnHand).toBe(0); // 200 g was NOT added as a bare number
     expect(item.quantityToBuy).toBe(0.5);
     expect(item.partial).toBe(true);
+  });
+});
+
+describe("aggregateShoppingItems — staples & estimates", () => {
+  const SALT_META: AggregateInput["ingredients"] = [{ id: 200, defaultUnit: "tsp" }];
+
+  function stapleMeal(unit: string): AggregateInput["plannedMeals"][number] {
+    return {
+      cookStyle: "cook_fresh",
+      servings: 2,
+      meal: { servings: 2, ingredients: [{ ingredientId: 200, quantity: 1, unit }] },
+    };
+  }
+
+  it("routes a descriptor-only ingredient to staples, not a numeric line", () => {
+    const res = aggregateShoppingItems({
+      plannedMeals: [stapleMeal("to taste")],
+      pantryItems: [],
+      ingredients: SALT_META,
+    });
+    expect(res.items).toEqual([]);
+    expect(res.staples).toEqual([200]);
+  });
+
+  it("keeps an ingredient numeric (no staple) when it also has a real unit", () => {
+    const res = aggregateShoppingItems({
+      plannedMeals: [stapleMeal("tsp"), stapleMeal("to taste")],
+      pantryItems: [],
+      ingredients: SALT_META,
+    });
+    expect(res.staples).toEqual([]);
+    const salt = res.items.find((r) => r.ingredientId === 200)!;
+    expect(salt.quantityNeeded).toBe(1);
+  });
+
+  it("marks an unconvertible real unit as an estimate (need 0, partial)", () => {
+    const res = aggregateShoppingItems({
+      plannedMeals: [stapleMeal("sprig")], // 'sprig' is unknown, not a descriptor
+      pantryItems: [],
+      ingredients: SALT_META,
+    });
+    const est = res.items.find((r) => r.ingredientId === 200)!;
+    expect(est.quantityNeeded).toBe(0);
+    expect(est.partial).toBe(true);
+    expect(res.staples).toEqual([]);
+  });
+
+  it("counts a 'whole' onion need and subtracts count pantry stock", () => {
+    const ONION: AggregateInput["ingredients"] = [{ id: 5, defaultUnit: "count" }];
+    const res = aggregateShoppingItems({
+      plannedMeals: [
+        { cookStyle: "cook_fresh", servings: 2, meal: { servings: 2, ingredients: [{ ingredientId: 5, quantity: 1, unit: "whole" }] } },
+        { cookStyle: "cook_fresh", servings: 2, meal: { servings: 2, ingredients: [{ ingredientId: 5, quantity: 1, unit: "whole" }] } },
+      ],
+      pantryItems: [],
+      ingredients: ONION,
+    });
+    const onion = res.items.find((r) => r.ingredientId === 5)!;
+    expect(onion.quantityNeeded).toBe(2);
+    expect(onion.quantityToBuy).toBe(2);
+    expect(onion.partial).toBe(false);
   });
 });
