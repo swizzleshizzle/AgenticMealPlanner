@@ -46,6 +46,7 @@ export default function ShoppingList() {
   const [plans, setPlans] = useState<WeeklyPlan[]>([]);
   const [items, setItems] = useState<ShoppingItem[]>([]);
   const [customItems, setCustomItems] = useState<CustomShoppingItem[]>([]);
+  const [staples, setStaples] = useState<string[]>([]);
   const [generating, setGenerating] = useState(false);
   const [lowStock, setLowStock] = useState<LowStockSuggestion[]>([]);
   const [draftName, setDraftName] = useState("");
@@ -81,9 +82,12 @@ export default function ShoppingList() {
   useEffect(() => {
     if (!viewedPlan) {
       setItems([]);
+      setStaples([]);
       return;
     }
-    getShoppingList(viewedPlan.id).then(setItems).catch(() => setItems([]));
+    getShoppingList(viewedPlan.id)
+      .then((r) => { setItems(r.items); setStaples(r.staples); })
+      .catch(() => { setItems([]); setStaples([]); });
   }, [viewedPlan?.id]);
 
   useEffect(() => {
@@ -107,7 +111,9 @@ export default function ShoppingList() {
     if (!viewedPlan) return;
     setGenerating(true);
     try {
-      setItems(await generateShoppingList(viewedPlan.id));
+      const r = await generateShoppingList(viewedPlan.id);
+      setItems(r.items);
+      setStaples(r.staples);
     } finally { setGenerating(false); }
   };
 
@@ -163,8 +169,16 @@ export default function ShoppingList() {
     }
   };
 
-  const toBuy = useMemo(() => items.filter((i) => !i.checked && i.quantityToBuy > 0), [items]);
-  const alreadyHave = useMemo(() => items.filter((i) => !i.checked && i.quantityToBuy === 0), [items]);
+  // Estimate rows (need === 0) are unconvertible-unit items — show them under
+  // "To buy" with a "qty?" hint rather than as "Have 0".
+  const toBuy = useMemo(
+    () => items.filter((i) => !i.checked && (i.quantityToBuy > 0 || i.quantityNeeded === 0)),
+    [items],
+  );
+  const alreadyHave = useMemo(
+    () => items.filter((i) => !i.checked && i.quantityToBuy === 0 && i.quantityNeeded > 0),
+    [items],
+  );
   const done = useMemo(() => items.filter((i) => i.checked), [items]);
 
   const customToBuy = useMemo(() => customItems.filter((i) => !i.checked), [customItems]);
@@ -208,11 +222,7 @@ export default function ShoppingList() {
           </div>
           <h1 className="text-[26px] sm:text-[30px] font-semibold -tracking-[0.02em] text-ink-1">Shopping List</h1>
         </div>
-        {viewedPlan && !isPastWeek && items.length > 0 && (
-          <Button variant="ghost" icon={RefreshCw} onClick={handleGenerate} disabled={generating}>
-            {generating ? "Regenerating…" : "Regenerate"}
-          </Button>
-        )}
+        {/* Regenerate button removed: the list now recomputes live on every load. */}
       </div>
 
       {!viewedPlan ? (
@@ -330,6 +340,18 @@ export default function ShoppingList() {
         </Section>
       )}
 
+      {staples.length > 0 && (
+        <details className="bg-surface-1 border border-line rounded-[14px] overflow-hidden">
+          <summary className="cursor-pointer list-none px-4 sm:px-5 py-3 text-[11px] text-ink-3 uppercase tracking-[0.08em] flex justify-between">
+            <span>Season to taste</span>
+            <span>{staples.length} item{staples.length === 1 ? "" : "s"}</span>
+          </summary>
+          <div className="px-4 sm:px-5 pb-3 text-[13px] text-ink-2">
+            {staples.join(", ")}
+          </div>
+        </details>
+      )}
+
       {alreadyHave.length > 0 && (
         <div className="bg-accent-soft border border-accent-line rounded-[14px] overflow-hidden">
           <div className="px-4 sm:px-5 py-3 text-[11px] text-accent-ink uppercase tracking-[0.08em] flex items-center gap-1.5 font-semibold">
@@ -428,7 +450,11 @@ function Row({
         {item.ingredient.name}
       </div>
       <div className="text-[12.5px] text-ink-3 tabular-nums">
-        {item.quantityToBuy > 0 ? `${item.quantityToBuy} ${item.ingredient.defaultUnit ?? ""}` : `Have ${item.quantityNeeded} ${item.ingredient.defaultUnit ?? ""}`}
+        {item.quantityNeeded === 0
+          ? "qty?"
+          : item.quantityToBuy > 0
+            ? `${item.quantityToBuy} ${item.ingredient.defaultUnit ?? ""}`
+            : `Have ${item.quantityNeeded} ${item.ingredient.defaultUnit ?? ""}`}
       </div>
     </Wrapper>
   );

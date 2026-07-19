@@ -91,7 +91,7 @@ export default function Dashboard() {
         .sort((a, b) => a.weekStartDate.localeCompare(b.weekStartDate));
       const next = candidates.find(planCoversToday) ?? candidates[0] ?? null;
       setPlan(next);
-      if (next) getShoppingList(next.id).then(setShopping).catch(() => setShopping([]));
+      if (next) getShoppingList(next.id).then((r) => setShopping(r.items)).catch(() => setShopping([]));
     }).catch(() => setPlan(null));
     getPantry().then(setPantry).catch(() => setPantry([]));
   }, [setPlan, setShopping, setPantry]);

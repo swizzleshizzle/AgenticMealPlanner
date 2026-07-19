@@ -19,10 +19,15 @@ export interface LowStockSuggestion {
   thresholdUnit: string | null;
 }
 
+export interface ShoppingListResponse {
+  items: ShoppingItem[];
+  staples: string[];
+}
+
 export const getShoppingList = (planId: number) =>
-  apiFetch<ShoppingItem[]>(`/shopping/${planId}`);
+  apiFetch<ShoppingListResponse>(`/shopping/${planId}`);
 export const generateShoppingList = (planId: number) =>
-  apiFetch<ShoppingItem[]>(`/shopping/generate/${planId}`, { method: "POST" });
+  apiFetch<ShoppingListResponse>(`/shopping/generate/${planId}`, { method: "POST" });
 export const toggleItem = (id: number, checked: boolean) =>
   apiFetch<ShoppingItem>(`/shopping/item/${id}`, { method: "PUT", body: JSON.stringify({ checked }) });
 export const getLowStockSuggestions = () =>
