@@ -6,12 +6,13 @@ import { parseId } from "./_validation.js";
 const router = Router();
 
 router.post("/generate/:planId", async (req, res) => {
-  // Guard the id: generateShoppingList runs a deleteMany on planId first, so a
-  // NaN here would issue `deleteMany({ where: { planId: NaN }})`.
+  // Guard the id before it reaches the service: a NaN planId would issue Prisma
+  // queries against planId NaN. (generateShoppingList now recomputes + reconciles
+  // rather than deleting unconditionally.)
   const planId = parseId(req.params.planId, res, "plan id");
   if (planId === null) return;
-  const items = await shoppingService.generateShoppingList(planId);
-  res.status(201).json(items);
+  const result = await shoppingService.generateShoppingList(planId);
+  res.status(201).json(result);
 });
 
 router.get("/low-stock", async (_req, res) => {
@@ -78,8 +79,8 @@ router.delete("/custom/:id", async (req, res) => {
 router.get("/:planId", async (req, res) => {
   const planId = parseId(req.params.planId, res, "plan id");
   if (planId === null) return;
-  const items = await shoppingService.getShoppingList(planId);
-  res.json(items);
+  const result = await shoppingService.getShoppingList(planId);
+  res.json(result);
 });
 
 router.put("/item/:id", async (req, res) => {

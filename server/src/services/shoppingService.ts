@@ -1,7 +1,8 @@
 import { aggregateCards } from "./pantryAggregation.js";
 import { resolvePlannedMealForShopping, type VersionRow } from "./mealVersioning.js";
-import { convert, UnitConversionError } from "../lib/units.js";
+import { convert, UnitConversionError, isDescriptorUnit } from "../lib/units.js";
 import { prisma } from "../lib/prisma.js";
+import { thisWeekSunday } from "../lib/week.js";
 
 export interface IngredientMeta {
   id: number;
@@ -48,6 +49,13 @@ export interface AggregateOutput {
   partial: boolean;
 }
 
+export interface AggregateResult {
+  /** Numeric + estimate rows. Estimate ⇒ quantityNeeded === 0 && partial. */
+  items: AggregateOutput[];
+  /** Ingredient ids whose only contributions were descriptor units (season-to-taste). */
+  staples: number[];
+}
+
 // Pure aggregation: given planned meals and pantry on-hand quantities, produce
 // the per-ingredient totals — every quantity converted to the ingredient's
 // default unit first, so amounts in different units of the same ingredient
@@ -57,7 +65,7 @@ export interface AggregateOutput {
 // Sunday). Pantry on-hand is subtracted from the need to compute quantityToBuy,
 // clamped at zero. Terms that can't be converted (cross-type without a density
 // hint) are skipped and flagged via `partial` rather than mis-summed.
-export function aggregateShoppingItems(input: AggregateInput): AggregateOutput[] {
+export function aggregateShoppingItems(input: AggregateInput): AggregateResult {
   const metaById = new Map(input.ingredients.map((i) => [i.id, i]));
   const hintFor = (id: number) => {
     const m = metaById.get(id);
@@ -67,11 +75,17 @@ export function aggregateShoppingItems(input: AggregateInput): AggregateOutput[]
   const needed = new Map<number, number>();
   const onHand = new Map<number, number>();
   const partial = new Set<number>();
+  const staple = new Set<number>();
 
   for (const pm of input.plannedMeals) {
     if (pm.cookStyle === "leftovers") continue;
     const scaleFactor = pm.servings / pm.meal.servings;
     for (const mi of pm.meal.ingredients) {
+      // Non-quantifiable amounts (to taste, pinch, …) never produce a number.
+      if (isDescriptorUnit(mi.unit)) {
+        staple.add(mi.ingredientId);
+        continue;
+      }
       const target = metaById.get(mi.ingredientId)?.defaultUnit ?? mi.unit;
       const raw = mi.quantity * scaleFactor;
       try {
@@ -80,8 +94,10 @@ export function aggregateShoppingItems(input: AggregateInput): AggregateOutput[]
       } catch (e) {
         if (e instanceof UnitConversionError) {
           partial.add(mi.ingredientId);
-          // Keep the ingredient visible even if its only contributions were
-          // unconvertible, so a needed item is never silently dropped.
+          // Estimate: keep the ingredient visible with need 0 so the client
+          // buckets it under "to buy — couldn't estimate qty". Relies on the
+          // invariant that genuine numeric needs are always > 0 (a 0-quantity
+          // meal-ingredient would be indistinguishable and render as an estimate).
           if (!needed.has(mi.ingredientId)) needed.set(mi.ingredientId, 0);
         } else {
           throw e;
@@ -105,12 +121,12 @@ export function aggregateShoppingItems(input: AggregateInput): AggregateOutput[]
     }
   }
 
-  const out: AggregateOutput[] = [];
+  const items: AggregateOutput[] = [];
   for (const [ingredientId, quantityNeeded] of needed) {
     const target = metaById.get(ingredientId)?.defaultUnit ?? "";
     const quantityOnHand = onHand.get(ingredientId) ?? 0;
     const quantityToBuy = Math.max(0, quantityNeeded - quantityOnHand);
-    out.push({
+    items.push({
       ingredientId,
       unit: target,
       quantityNeeded,
@@ -119,12 +135,18 @@ export function aggregateShoppingItems(input: AggregateInput): AggregateOutput[]
       partial: partial.has(ingredientId),
     });
   }
-  return out;
+
+  // Descriptor-only ingredients: staple unless they also had a numeric/estimate need.
+  const staples = [...staple].filter((id) => !needed.has(id));
+
+  return { items, staples };
 }
 
-export async function generateShoppingList(planId: number) {
-  await prisma.shoppingItem.deleteMany({ where: { planId } });
-
+// Shared compute: resolve planned-meal versions, pull live pantry, aggregate.
+// Returns numeric/estimate rows plus descriptor-only staple names. No writes.
+async function computeShoppingItems(
+  planId: number,
+): Promise<{ items: AggregateOutput[]; staples: string[] }> {
   // Query ALL non-leftovers PlannedMeals regardless of status — status
   // filtering happens after version resolution so the resolver sees every row.
   const plannedMeals = await prisma.plannedMeal.findMany({
@@ -204,7 +226,7 @@ export async function generateShoppingList(planId: number) {
     select: { id: true, defaultUnit: true, densityGPerMl: true, gramsPerCount: true },
   });
 
-  const aggregated = aggregateShoppingItems({
+  const { items, staples: stapleIds } = aggregateShoppingItems({
     plannedMeals: statusFilteredInput,
     pantryItems: pantryItems.map((p) => ({
       ingredientId: p.ingredientId,
@@ -214,37 +236,87 @@ export async function generateShoppingList(planId: number) {
     ingredients: ingredientMeta,
   });
 
-  const partials = aggregated.filter((a) => a.partial);
+  const partials = items.filter((a) => a.partial);
   if (partials.length > 0) {
     console.warn(
       `[shopping] plan ${planId}: ${partials.length} ingredient(s) had unconvertible units; ` +
-        `totals may be incomplete (ingredientIds: ${partials.map((p) => p.ingredientId).join(", ")})`,
+        `shown as estimates (ingredientIds: ${partials.map((p) => p.ingredientId).join(", ")})`,
     );
   }
 
-  await prisma.shoppingItem.createMany({
-    data: aggregated.map((a) => ({
-      planId,
-      ingredientId:   a.ingredientId,
-      quantityNeeded: a.quantityNeeded,
-      quantityOnHand: a.quantityOnHand,
-      quantityToBuy:  a.quantityToBuy,
-    })),
-  });
+  const stapleNames = stapleIds.length
+    ? (await prisma.ingredient.findMany({
+        where: { id: { in: stapleIds } },
+        select: { name: true },
+        orderBy: { name: "asc" },
+      })).map((i) => i.name)
+    : [];
 
-  return prisma.shoppingItem.findMany({
-    where: { planId },
-    include: { ingredient: true },
-    orderBy: { ingredient: { category: "asc" } },
-  });
+  return { items, staples: stapleNames };
 }
 
+// Reconcile persisted rows to `items`, preserving `checked`: upsert each needed
+// ingredient (quantities only) and delete rows for ingredients no longer needed.
+async function reconcileShoppingItems(planId: number, items: AggregateOutput[]) {
+  const keepIds = items.map((i) => i.ingredientId);
+  // One transaction: delete rows for ingredients no longer needed, then upsert
+  // each needed row. Empty keepIds → notIn: [] is Prisma "always true" → deletes
+  // all of the plan's rows. update touches quantities only, so `checked` survives.
+  await prisma.$transaction([
+    prisma.shoppingItem.deleteMany({
+      where: { planId, ingredientId: { notIn: keepIds } },
+    }),
+    ...items.map((it) =>
+      prisma.shoppingItem.upsert({
+        where: { planId_ingredientId: { planId, ingredientId: it.ingredientId } },
+        create: {
+          planId,
+          ingredientId: it.ingredientId,
+          quantityNeeded: it.quantityNeeded,
+          quantityOnHand: it.quantityOnHand,
+          quantityToBuy: it.quantityToBuy,
+        },
+        update: {
+          quantityNeeded: it.quantityNeeded,
+          quantityOnHand: it.quantityOnHand,
+          quantityToBuy: it.quantityToBuy,
+        },
+      }),
+    ),
+  ]);
+}
+
+// Read path. Current/future weeks recompute live from pantry + plan and
+// reconcile the persisted rows (preserving checked). PAST weeks are read-only
+// history: return their stored snapshot untouched — recomputing would rewrite a
+// completed week's list against *today's* pantry, corrupting what that week needed.
 export async function getShoppingList(planId: number) {
-  return prisma.shoppingItem.findMany({
+  const plan = await prisma.weeklyPlan.findUnique({
+    where: { id: planId },
+    select: { weekStartDate: true },
+  });
+  const isPastWeek =
+    plan != null &&
+    plan.weekStartDate.toISOString().slice(0, 10) < thisWeekSunday(new Date());
+
+  let staples: string[] = [];
+  if (!isPastWeek) {
+    const computed = await computeShoppingItems(planId);
+    staples = computed.staples;
+    await reconcileShoppingItems(planId, computed.items);
+  }
+  const rows = await prisma.shoppingItem.findMany({
     where: { planId },
     include: { ingredient: true },
     orderBy: { ingredient: { category: "asc" } },
   });
+  return { items: rows, staples };
+}
+
+// The list is now always live on read, so "generate" is just a recompute.
+// Kept for the POST /generate route and callers that still invoke it.
+export async function generateShoppingList(planId: number) {
+  return getShoppingList(planId);
 }
 
 export async function toggleShoppingItem(id: number, checked: boolean) {

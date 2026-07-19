@@ -9,9 +9,9 @@ const getShoppingList: ToolDef = {
   schema: z.object({ planId: z.number().int().optional() }),
   handler: async (input, ctx) => {
     const planId = input.planId ?? ctx.pageContext.planId;
-    if (!planId) return { items: [], error: "No planId provided and none in page context" };
-    const items = await generateShoppingList(planId);
-    return { items };
+    if (!planId) return { items: [], staples: [], error: "No planId provided and none in page context" };
+    const { items, staples } = await generateShoppingList(planId);
+    return { items, staples };
   },
 };
 

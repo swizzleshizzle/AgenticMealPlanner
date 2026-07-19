@@ -200,8 +200,8 @@ describe("customShoppingItem service — invariants", () => {
     await createCustomShoppingItem(plan.id, { name: "toilet paper", qtyText: "2 rolls" });
     await createCustomShoppingItem(plan.id, { name: "paper towels" });
 
-    // Run regenerate. With no planned meals it returns [] but the side effect
-    // we care about is shoppingItem.deleteMany — which must NOT touch our table.
+    // Run recompute. With no planned meals it produces no items, but the point
+    // is that reconcile only touches shoppingItem — never customShoppingItem.
     await generateShoppingList(plan.id);
 
     const rows = await listCustomShoppingItems(plan.id);
