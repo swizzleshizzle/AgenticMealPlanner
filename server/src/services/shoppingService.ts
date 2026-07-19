@@ -2,6 +2,7 @@ import { aggregateCards } from "./pantryAggregation.js";
 import { resolvePlannedMealForShopping, type VersionRow } from "./mealVersioning.js";
 import { convert, UnitConversionError, isDescriptorUnit } from "../lib/units.js";
 import { prisma } from "../lib/prisma.js";
+import { thisWeekSunday } from "../lib/week.js";
 
 export interface IngredientMeta {
   id: number;
@@ -93,7 +94,10 @@ export function aggregateShoppingItems(input: AggregateInput): AggregateResult {
       } catch (e) {
         if (e instanceof UnitConversionError) {
           partial.add(mi.ingredientId);
-          // Keep an unconvertible-but-real ingredient visible as an estimate.
+          // Estimate: keep the ingredient visible with need 0 so the client
+          // buckets it under "to buy — couldn't estimate qty". Relies on the
+          // invariant that genuine numeric needs are always > 0 (a 0-quantity
+          // meal-ingredient would be indistinguishable and render as an estimate).
           if (!needed.has(mi.ingredientId)) needed.set(mi.ingredientId, 0);
         } else {
           throw e;
@@ -255,33 +259,52 @@ async function computeShoppingItems(
 // ingredient (quantities only) and delete rows for ingredients no longer needed.
 async function reconcileShoppingItems(planId: number, items: AggregateOutput[]) {
   const keepIds = items.map((i) => i.ingredientId);
-  await prisma.shoppingItem.deleteMany({
-    where: { planId, ingredientId: { notIn: keepIds } },
-  });
-  for (const it of items) {
-    await prisma.shoppingItem.upsert({
-      where: { planId_ingredientId: { planId, ingredientId: it.ingredientId } },
-      create: {
-        planId,
-        ingredientId: it.ingredientId,
-        quantityNeeded: it.quantityNeeded,
-        quantityOnHand: it.quantityOnHand,
-        quantityToBuy: it.quantityToBuy,
-      },
-      update: {
-        quantityNeeded: it.quantityNeeded,
-        quantityOnHand: it.quantityOnHand,
-        quantityToBuy: it.quantityToBuy,
-      },
-    });
-  }
+  // One transaction: delete rows for ingredients no longer needed, then upsert
+  // each needed row. Empty keepIds → notIn: [] is Prisma "always true" → deletes
+  // all of the plan's rows. update touches quantities only, so `checked` survives.
+  await prisma.$transaction([
+    prisma.shoppingItem.deleteMany({
+      where: { planId, ingredientId: { notIn: keepIds } },
+    }),
+    ...items.map((it) =>
+      prisma.shoppingItem.upsert({
+        where: { planId_ingredientId: { planId, ingredientId: it.ingredientId } },
+        create: {
+          planId,
+          ingredientId: it.ingredientId,
+          quantityNeeded: it.quantityNeeded,
+          quantityOnHand: it.quantityOnHand,
+          quantityToBuy: it.quantityToBuy,
+        },
+        update: {
+          quantityNeeded: it.quantityNeeded,
+          quantityOnHand: it.quantityOnHand,
+          quantityToBuy: it.quantityToBuy,
+        },
+      }),
+    ),
+  ]);
 }
 
-// Read path: recompute live from current pantry + plan, reconcile persisted
-// rows (preserving checked), and return items + season-to-taste staples.
+// Read path. Current/future weeks recompute live from pantry + plan and
+// reconcile the persisted rows (preserving checked). PAST weeks are read-only
+// history: return their stored snapshot untouched — recomputing would rewrite a
+// completed week's list against *today's* pantry, corrupting what that week needed.
 export async function getShoppingList(planId: number) {
-  const { items, staples } = await computeShoppingItems(planId);
-  await reconcileShoppingItems(planId, items);
+  const plan = await prisma.weeklyPlan.findUnique({
+    where: { id: planId },
+    select: { weekStartDate: true },
+  });
+  const isPastWeek =
+    plan != null &&
+    plan.weekStartDate.toISOString().slice(0, 10) < thisWeekSunday(new Date());
+
+  let staples: string[] = [];
+  if (!isPastWeek) {
+    const computed = await computeShoppingItems(planId);
+    staples = computed.staples;
+    await reconcileShoppingItems(planId, computed.items);
+  }
   const rows = await prisma.shoppingItem.findMany({
     where: { planId },
     include: { ingredient: true },

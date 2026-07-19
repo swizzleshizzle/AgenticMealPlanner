@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { getShoppingList, toggleShoppingItem } from "../services/shoppingService.js";
+import { thisWeekSunday } from "../lib/week.js";
 
 const prisma = new PrismaClient();
 
@@ -20,7 +21,7 @@ async function seed(opts: { need: number; pantry?: number }) {
   const ing = await prisma.ingredient.create({
     data: { name: "onion", category: "produce", defaultUnit: "count" },
   });
-  const plan = await prisma.weeklyPlan.create({ data: { weekStartDate: new Date("2026-05-17") } });
+  const plan = await prisma.weeklyPlan.create({ data: { weekStartDate: new Date(thisWeekSunday(new Date())) } });
   const meal = await prisma.meal.create({
     data: {
       recipeId: ing.id, name: "Test", servings: 2, isDefault: true,
@@ -70,5 +71,36 @@ describe("getShoppingList — recompute on read", () => {
     const after = await getShoppingList(planId);
     expect(after.items).toEqual([]);
     expect(await prisma.shoppingItem.count({ where: { planId } })).toBe(0);
+  });
+
+  it("does not recompute or rewrite a past week's stored list", async () => {
+    const ing = await prisma.ingredient.create({
+      data: { name: "onion", category: "produce", defaultUnit: "count" },
+    });
+    const plan = await prisma.weeklyPlan.create({
+      data: { weekStartDate: new Date("2020-01-05") }, // clearly past
+    });
+    const meal = await prisma.meal.create({
+      data: {
+        recipeId: ing.id, name: "T", servings: 2, isDefault: true,
+        ingredients: { create: [{ ingredientId: ing.id, quantity: 2, unit: "whole" }] },
+      },
+    });
+    await prisma.plannedMeal.create({
+      data: { planId: plan.id, mealId: meal.id, day: "monday", mealSlot: "dinner", servings: 2, status: "planned", cookStyle: "cook_fresh" },
+    });
+    // A snapshot from when the week was current: "already had it, checked off".
+    await prisma.shoppingItem.create({
+      data: { planId: plan.id, ingredientId: ing.id, quantityNeeded: 2, quantityOnHand: 2, quantityToBuy: 0, checked: true },
+    });
+
+    const res = await getShoppingList(plan.id);
+
+    // Returned as-is: a live recompute (no active pantry) would set quantityToBuy=2
+    // and reset checked — the past-week gate must prevent both.
+    const row = res.items.find((i) => i.ingredientId === ing.id)!;
+    expect(row.quantityToBuy).toBe(0);
+    expect(row.checked).toBe(true);
+    expect(res.items).toHaveLength(1);
   });
 });

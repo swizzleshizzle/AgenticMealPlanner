@@ -31,6 +31,9 @@ import { dispatchToolCall } from "./registry.js";
 import { allTools } from "./tools/index.js";
 import type { PageContext, AgentResult, StreamEvent } from "./types.js";
 import { resolveClaudeBinary } from "../claude/binaryResolver.js";
+import { localYmd, thisWeekSunday } from "../lib/week.js";
+
+export { thisWeekSunday };
 
 export interface RunAgentArgs {
   userMessage: string;
@@ -38,25 +41,6 @@ export interface RunAgentArgs {
   history?: { role: "user" | "assistant"; content: string }[];
   /** Abort the underlying SDK query when the caller cancels (e.g. SSE client disconnect). */
   abortController?: AbortController;
-}
-
-// -- Date helpers -------------------------------------------------------------
-
-function localYmd(d: Date): string {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-export function thisWeekSunday(now: Date): string {
-  // JS getDay(): 0 = Sunday, 1 = Monday, ..., 6 = Saturday.
-  // Sunday-anchored weeks: subtract dayIndex directly to land on Sunday.
-  // Mirrors client/src/api/plans.ts parseWeekParam math.
-  const dayIndex = now.getDay();
-  const sunday = new Date(now);
-  sunday.setDate(now.getDate() - dayIndex);
-  return localYmd(sunday);
 }
 
 // -- Streaming generator ------------------------------------------------------
