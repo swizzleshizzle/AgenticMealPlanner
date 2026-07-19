@@ -138,9 +138,11 @@ export function aggregateShoppingItems(input: AggregateInput): AggregateResult {
   return { items, staples };
 }
 
-export async function generateShoppingList(planId: number) {
-  await prisma.shoppingItem.deleteMany({ where: { planId } });
-
+// Shared compute: resolve planned-meal versions, pull live pantry, aggregate.
+// Returns numeric/estimate rows plus descriptor-only staple names. No writes.
+async function computeShoppingItems(
+  planId: number,
+): Promise<{ items: AggregateOutput[]; staples: string[] }> {
   // Query ALL non-leftovers PlannedMeals regardless of status — status
   // filtering happens after version resolution so the resolver sees every row.
   const plannedMeals = await prisma.plannedMeal.findMany({
@@ -220,7 +222,7 @@ export async function generateShoppingList(planId: number) {
     select: { id: true, defaultUnit: true, densityGPerMl: true, gramsPerCount: true },
   });
 
-  const aggregated = aggregateShoppingItems({
+  const { items, staples: stapleIds } = aggregateShoppingItems({
     plannedMeals: statusFilteredInput,
     pantryItems: pantryItems.map((p) => ({
       ingredientId: p.ingredientId,
@@ -230,37 +232,68 @@ export async function generateShoppingList(planId: number) {
     ingredients: ingredientMeta,
   });
 
-  const partials = aggregated.filter((a) => a.partial);
+  const partials = items.filter((a) => a.partial);
   if (partials.length > 0) {
     console.warn(
       `[shopping] plan ${planId}: ${partials.length} ingredient(s) had unconvertible units; ` +
-        `totals may be incomplete (ingredientIds: ${partials.map((p) => p.ingredientId).join(", ")})`,
+        `shown as estimates (ingredientIds: ${partials.map((p) => p.ingredientId).join(", ")})`,
     );
   }
 
-  await prisma.shoppingItem.createMany({
-    data: aggregated.map((a) => ({
-      planId,
-      ingredientId:   a.ingredientId,
-      quantityNeeded: a.quantityNeeded,
-      quantityOnHand: a.quantityOnHand,
-      quantityToBuy:  a.quantityToBuy,
-    })),
-  });
+  const stapleNames = stapleIds.length
+    ? (await prisma.ingredient.findMany({
+        where: { id: { in: stapleIds } },
+        select: { name: true },
+        orderBy: { name: "asc" },
+      })).map((i) => i.name)
+    : [];
 
-  return prisma.shoppingItem.findMany({
-    where: { planId },
-    include: { ingredient: true },
-    orderBy: { ingredient: { category: "asc" } },
-  });
+  return { items, staples: stapleNames };
 }
 
+// Reconcile persisted rows to `items`, preserving `checked`: upsert each needed
+// ingredient (quantities only) and delete rows for ingredients no longer needed.
+async function reconcileShoppingItems(planId: number, items: AggregateOutput[]) {
+  const keepIds = items.map((i) => i.ingredientId);
+  await prisma.shoppingItem.deleteMany({
+    where: { planId, ingredientId: { notIn: keepIds } },
+  });
+  for (const it of items) {
+    await prisma.shoppingItem.upsert({
+      where: { planId_ingredientId: { planId, ingredientId: it.ingredientId } },
+      create: {
+        planId,
+        ingredientId: it.ingredientId,
+        quantityNeeded: it.quantityNeeded,
+        quantityOnHand: it.quantityOnHand,
+        quantityToBuy: it.quantityToBuy,
+      },
+      update: {
+        quantityNeeded: it.quantityNeeded,
+        quantityOnHand: it.quantityOnHand,
+        quantityToBuy: it.quantityToBuy,
+      },
+    });
+  }
+}
+
+// Read path: recompute live from current pantry + plan, reconcile persisted
+// rows (preserving checked), and return items + season-to-taste staples.
 export async function getShoppingList(planId: number) {
-  return prisma.shoppingItem.findMany({
+  const { items, staples } = await computeShoppingItems(planId);
+  await reconcileShoppingItems(planId, items);
+  const rows = await prisma.shoppingItem.findMany({
     where: { planId },
     include: { ingredient: true },
     orderBy: { ingredient: { category: "asc" } },
   });
+  return { items: rows, staples };
+}
+
+// The list is now always live on read, so "generate" is just a recompute.
+// Kept for the POST /generate route and callers that still invoke it.
+export async function generateShoppingList(planId: number) {
+  return getShoppingList(planId);
 }
 
 export async function toggleShoppingItem(id: number, checked: boolean) {
