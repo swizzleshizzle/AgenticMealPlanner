@@ -43,6 +43,19 @@ const COUNT: Record<string, number> = {
   count: 1,
   ea: 1,
   unit: 1,
+  whole: 1,
+  packet: 1,
+  package: 1,
+  pack: 1,
+  clove: 1,
+  cloves: 1,
+  slice: 1,
+  head: 1,
+  can: 1,
+  ear: 1,
+  bag: 1,
+  block: 1,
+  thumb: 1,
 };
 
 // Aliases users actually type. Lowercased, stripped of dots and spaces.
@@ -93,6 +106,21 @@ const ALIASES: Record<string, string> = {
 function normalize(u: string): string {
   const k = u.toLowerCase().replace(/\./g, "").replace(/\s+/g, "");
   return ALIASES[k] ?? k;
+}
+
+// Non-quantifiable recipe amounts. These never convert to a number; the
+// shopping aggregator routes them to a "season to taste" staples note instead
+// of a numeric line. Keys are post-normalize() (spaces stripped).
+const DESCRIPTOR_UNITS = new Set<string>([
+  "totaste",
+  "pinch",
+  "drizzle",
+  "spray",
+  "asneeded",
+]);
+
+export function isDescriptorUnit(u: string): boolean {
+  return DESCRIPTOR_UNITS.has(u.toLowerCase().replace(/\./g, "").replace(/\s+/g, ""));
 }
 
 function classify(u: string): { type: UnitType; canonicalPerUnit: number } {

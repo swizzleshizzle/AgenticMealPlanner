@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { convert, UnitConversionError, type DensityHint } from "../lib/units.js";
+import { convert, UnitConversionError, isDescriptorUnit, type DensityHint } from "../lib/units.js";
 
 describe("convert", () => {
   it("same-unit returns the same value", () => {
@@ -65,4 +65,33 @@ describe("convert", () => {
   it("unknown unit throws UnitConversionError", () => {
     expect(() => convert(1, "blarg", "g")).toThrow(UnitConversionError);
   });
+});
+
+describe("discrete count units", () => {
+  it.each(["whole", "packet", "package", "pack", "clove", "cloves", "slice", "head", "can", "ear", "bag", "block", "thumb"])(
+    "%s converts to count 1:1",
+    (u) => {
+      expect(convert(2, u, "count")).toBe(2);
+    },
+  );
+
+  it("count-family units interconvert (whole -> unit)", () => {
+    expect(convert(3, "whole", "unit")).toBe(3);
+  });
+});
+
+describe("isDescriptorUnit", () => {
+  it.each(["to taste", "To Taste", "pinch", "drizzle", "spray", "as needed", "AS NEEDED"])(
+    "classifies %s as a descriptor",
+    (u) => {
+      expect(isDescriptorUnit(u)).toBe(true);
+    },
+  );
+
+  it.each(["oz", "tbsp", "whole", "count", "packet", "cup"])(
+    "does not classify real unit %s as a descriptor",
+    (u) => {
+      expect(isDescriptorUnit(u)).toBe(false);
+    },
+  );
 });
