@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Search, Flame, Leaf, Upload, Plus, Archive } from "lucide-react";
 import { getMeals, type Meal } from "../api/meals";
 import MealCard from "../components/MealCard";
+import TagFilterBar from "../components/TagFilterBar";
 import Button from "../components/ui/Button";
 
 const FILTERS = [
@@ -90,26 +91,8 @@ export default function Recipes() {
         </div>
       </div>
 
-      {allTags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 -mt-2">
-          {allTags.map((t) => {
-            const active = tag === t;
-            return (
-              <button
-                key={t}
-                onClick={() => setTag(active ? null : t)}
-                className={`text-[12px] px-3 py-[4px] rounded-full font-medium border transition ${
-                  active
-                    ? "bg-accent text-accent-on border-accent"
-                    : "bg-surface-1 text-ink-2 border-line hover:border-accent-line"
-                }`}
-              >
-                {t}
-              </button>
-            );
-          })}
-        </div>
-      )}
+      <TagFilterBar tags={allTags} active={tag} onToggle={setTag} />
+
 
       {filtered.length === 0 ? (
         <div className="text-center py-16 text-[14px] text-ink-3">
