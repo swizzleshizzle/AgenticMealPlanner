@@ -73,6 +73,81 @@ describe("getShoppingList — recompute on read", () => {
     expect(await prisma.shoppingItem.count({ where: { planId } })).toBe(0);
   });
 
+  it("satisfies an aliased ingredient's need from the canonical ingredient's stock", async () => {
+    // Recipe references "chicken cutlet" (its own ingredient record); the
+    // pantry holds "chicken breast"; an alias row links the two. The list must
+    // pool them under the canonical ingredient instead of demanding cutlets.
+    const breast = await prisma.ingredient.create({
+      data: { name: "chicken breast", category: "protein", defaultUnit: "oz" },
+    });
+    const cutlet = await prisma.ingredient.create({
+      data: { name: "chicken cutlet", category: "protein", defaultUnit: "oz" },
+    });
+    await prisma.ingredientAlias.create({
+      data: { alias: "chicken cutlet", ingredientId: breast.id },
+    });
+    const plan = await prisma.weeklyPlan.create({
+      data: { weekStartDate: new Date(thisWeekSunday(new Date())) },
+    });
+    const meal = await prisma.meal.create({
+      data: {
+        recipeId: cutlet.id, name: "Onion Crunch Chicken", servings: 2, isDefault: true,
+        ingredients: { create: [{ ingredientId: cutlet.id, quantity: 42, unit: "oz" }] },
+      },
+    });
+    await prisma.plannedMeal.create({
+      data: { planId: plan.id, mealId: meal.id, day: "monday", mealSlot: "dinner", servings: 2, status: "planned", cookStyle: "cook_fresh" },
+    });
+    await prisma.pantryBatch.create({
+      data: { ingredientId: breast.id, quantity: 1.25, unit: "lb" },
+    });
+
+    const res = await getShoppingList(plan.id);
+
+    expect(res.items).toHaveLength(1);
+    const row = res.items[0];
+    expect(row.ingredientId).toBe(breast.id);
+    expect(row.quantityNeeded).toBeCloseTo(42, 5);
+    expect(row.quantityOnHand).toBeCloseTo(20, 5); // 1.25 lb
+    expect(row.quantityToBuy).toBeCloseTo(22, 5);
+  });
+
+  it("flags items whose pantry stock was skipped by an impossible unit conversion", async () => {
+    // Recipe wants ranch by weight (oz); the pantry bottle is fl oz. Without a
+    // density hint the on-hand credit is dropped — the row must say so instead
+    // of silently telling the user to buy a bottle they own.
+    const ranch = await prisma.ingredient.create({
+      data: { name: "buttermilk ranch dressing", category: "condiment", defaultUnit: "oz" },
+    });
+    const plan = await prisma.weeklyPlan.create({
+      data: { weekStartDate: new Date(thisWeekSunday(new Date())) },
+    });
+    const meal = await prisma.meal.create({
+      data: {
+        recipeId: ranch.id, name: "Loaded Potatoes", servings: 2, isDefault: true,
+        ingredients: { create: [{ ingredientId: ranch.id, quantity: 3, unit: "oz" }] },
+      },
+    });
+    await prisma.plannedMeal.create({
+      data: { planId: plan.id, mealId: meal.id, day: "monday", mealSlot: "dinner", servings: 2, status: "planned", cookStyle: "cook_fresh" },
+    });
+    await prisma.pantryBatch.create({
+      data: { ingredientId: ranch.id, quantity: 16, unit: "fl oz" },
+    });
+
+    const res = await getShoppingList(plan.id);
+
+    const row = res.items.find((i) => i.ingredientId === ranch.id)!;
+    expect(row.quantityToBuy).toBeCloseTo(3, 5); // credit was skipped…
+    expect(row.partial).toBe(true); // …but the row admits it
+  });
+
+  it("returns partial: false for cleanly-converted items", async () => {
+    const { planId, ingredientId } = await seed({ need: 2, pantry: 5 });
+    const res = await getShoppingList(planId);
+    expect(res.items.find((i) => i.ingredientId === ingredientId)!.partial).toBe(false);
+  });
+
   it("does not recompute or rewrite a past week's stored list", async () => {
     const ing = await prisma.ingredient.create({
       data: { name: "onion", category: "produce", defaultUnit: "count" },

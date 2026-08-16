@@ -103,11 +103,24 @@ export function selectBatchesToDrain(input: {
 
   let remaining = input.needed; // in input.neededUnit
   const consumed: DrainPlan["consumed"] = [];
+  let firstConversionError: UnitConversionError | null = null;
 
   for (const b of ordered) {
     if (remaining <= 0) break;
-    // How much of this batch (expressed in neededUnit) is available?
-    const batchInNeededUnit = convert(b.quantity, b.unit, input.neededUnit, hint);
+    // How much of this batch (expressed in neededUnit) is available? A batch
+    // whose unit can't convert (e.g. a "package" batch against a count need)
+    // is skipped rather than mis-counted — draining it 1:1 is how a 2-bun
+    // meal once consumed a package batch AND 1.75 loose buns.
+    let batchInNeededUnit: number;
+    try {
+      batchInNeededUnit = convert(b.quantity, b.unit, input.neededUnit, hint);
+    } catch (e) {
+      if (e instanceof UnitConversionError) {
+        firstConversionError ??= e;
+        continue;
+      }
+      throw e;
+    }
     if (batchInNeededUnit <= remaining) {
       // Drain entirely.
       remaining -= batchInNeededUnit;
@@ -118,6 +131,13 @@ export function selectBatchesToDrain(input: {
       consumed.push({ batchId: b.id, partial: true, newQuantity: b.quantity - drainInBatchUnit });
       remaining = 0;
     }
+  }
+
+  // Nothing was drainable and at least one batch was skipped for conversion
+  // reasons: that's a conversion problem (caller reports "no_density"-style),
+  // not an insufficient-stock problem.
+  if (consumed.length === 0 && firstConversionError && remaining === input.needed) {
+    throw firstConversionError;
   }
 
   return { consumed, shortfall: remaining, shortfallUnit: input.neededUnit };

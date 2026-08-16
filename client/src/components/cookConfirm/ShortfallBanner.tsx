@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/formatQuantity";
 import { X } from "lucide-react";
 import type { DeductShortfall } from "../../api/plans";
 
@@ -6,15 +7,11 @@ interface Props {
   onDismiss: () => void;
 }
 
-function formatQty(n: number): string {
-  if (n === Math.floor(n)) return String(n);
-  return n.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
-}
 
 function lineFor(s: DeductShortfall): string {
   switch (s.reason) {
     case "insufficient":
-      return `${s.ingredientName}: needed ${formatQty(s.requestedQuantity)} ${s.requestedUnit}, had ${formatQty(s.availableQuantity)} ${s.requestedUnit}`;
+      return `${s.ingredientName}: needed ${formatQuantity(s.requestedQuantity)} ${s.requestedUnit}, had ${formatQuantity(s.availableQuantity)} ${s.requestedUnit}`;
     case "no_density":
       return `${s.ingredientName}: couldn't deduct (no density set for ${s.requestedUnit})`;
     case "no_pantry":

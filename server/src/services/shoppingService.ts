@@ -31,6 +31,12 @@ export interface AggregateInput {
   }>;
   /** Per-ingredient conversion metadata (default unit + density hints). */
   ingredients: IngredientMeta[];
+  /**
+   * Alias resolution: source ingredientId → canonical ingredientId. Needs and
+   * on-hand for a source id pool under the canonical id (e.g. a "chicken
+   * cutlet" need is satisfied by "chicken breast" stock).
+   */
+  canonicalIds?: Map<number, number>;
 }
 
 export interface AggregateOutput {
@@ -67,6 +73,7 @@ export interface AggregateResult {
 // hint) are skipped and flagged via `partial` rather than mis-summed.
 export function aggregateShoppingItems(input: AggregateInput): AggregateResult {
   const metaById = new Map(input.ingredients.map((i) => [i.id, i]));
+  const canon = (id: number) => input.canonicalIds?.get(id) ?? id;
   const hintFor = (id: number) => {
     const m = metaById.get(id);
     return { densityGPerMl: m?.densityGPerMl ?? null, gramsPerCount: m?.gramsPerCount ?? null };
@@ -81,24 +88,25 @@ export function aggregateShoppingItems(input: AggregateInput): AggregateResult {
     if (pm.cookStyle === "leftovers") continue;
     const scaleFactor = pm.servings / pm.meal.servings;
     for (const mi of pm.meal.ingredients) {
+      const id = canon(mi.ingredientId);
       // Non-quantifiable amounts (to taste, pinch, …) never produce a number.
       if (isDescriptorUnit(mi.unit)) {
-        staple.add(mi.ingredientId);
+        staple.add(id);
         continue;
       }
-      const target = metaById.get(mi.ingredientId)?.defaultUnit ?? mi.unit;
+      const target = metaById.get(id)?.defaultUnit ?? mi.unit;
       const raw = mi.quantity * scaleFactor;
       try {
-        const q = convert(raw, mi.unit, target, hintFor(mi.ingredientId));
-        needed.set(mi.ingredientId, (needed.get(mi.ingredientId) ?? 0) + q);
+        const q = convert(raw, mi.unit, target, hintFor(id));
+        needed.set(id, (needed.get(id) ?? 0) + q);
       } catch (e) {
         if (e instanceof UnitConversionError) {
-          partial.add(mi.ingredientId);
+          partial.add(id);
           // Estimate: keep the ingredient visible with need 0 so the client
           // buckets it under "to buy — couldn't estimate qty". Relies on the
           // invariant that genuine numeric needs are always > 0 (a 0-quantity
           // meal-ingredient would be indistinguishable and render as an estimate).
-          if (!needed.has(mi.ingredientId)) needed.set(mi.ingredientId, 0);
+          if (!needed.has(id)) needed.set(id, 0);
         } else {
           throw e;
         }
@@ -107,14 +115,15 @@ export function aggregateShoppingItems(input: AggregateInput): AggregateResult {
   }
 
   for (const item of input.pantryItems) {
-    if (!needed.has(item.ingredientId)) continue; // only care about needed ingredients
-    const target = metaById.get(item.ingredientId)?.defaultUnit ?? item.unit;
+    const id = canon(item.ingredientId);
+    if (!needed.has(id)) continue; // only care about needed ingredients
+    const target = metaById.get(id)?.defaultUnit ?? item.unit;
     try {
-      const q = convert(item.quantity, item.unit, target, hintFor(item.ingredientId));
-      onHand.set(item.ingredientId, (onHand.get(item.ingredientId) ?? 0) + q);
+      const q = convert(item.quantity, item.unit, target, hintFor(id));
+      onHand.set(id, (onHand.get(id) ?? 0) + q);
     } catch (e) {
       if (e instanceof UnitConversionError) {
-        partial.add(item.ingredientId);
+        partial.add(id);
       } else {
         throw e;
       }
@@ -221,8 +230,27 @@ async function computeShoppingItems(
       ...pantryItems.map((p) => p.ingredientId),
     ]),
   ];
-  const ingredientMeta = await prisma.ingredient.findMany({
+
+  // Alias canonicalization: an involved ingredient whose *name* is an alias of
+  // another ingredient (e.g. "chicken cutlet" → "chicken breast") is folded
+  // into that target, so its needs and the target's stock pool on one line.
+  const involvedNames = await prisma.ingredient.findMany({
     where: { id: { in: involvedIngredientIds } },
+    select: { id: true, name: true },
+  });
+  const aliasRows = await prisma.ingredientAlias.findMany({
+    select: { alias: true, ingredientId: true },
+  });
+  const aliasTargetByName = new Map(aliasRows.map((a) => [a.alias.toLowerCase(), a.ingredientId]));
+  const canonicalIds = new Map<number, number>();
+  for (const ing of involvedNames) {
+    const target = aliasTargetByName.get(ing.name.toLowerCase());
+    if (target != null && target !== ing.id) canonicalIds.set(ing.id, target);
+  }
+
+  const metaIngredientIds = [...new Set([...involvedIngredientIds, ...canonicalIds.values()])];
+  const ingredientMeta = await prisma.ingredient.findMany({
+    where: { id: { in: metaIngredientIds } },
     select: { id: true, defaultUnit: true, densityGPerMl: true, gramsPerCount: true },
   });
 
@@ -234,6 +262,7 @@ async function computeShoppingItems(
       unit: p.unit,
     })),
     ingredients: ingredientMeta,
+    canonicalIds,
   });
 
   const partials = items.filter((a) => a.partial);
@@ -300,9 +329,14 @@ export async function getShoppingList(planId: number) {
     plan.weekStartDate.toISOString().slice(0, 10) < thisWeekSunday(new Date());
 
   let staples: string[] = [];
+  // Live per-ingredient "partial" flags (an on-hand or needed term was skipped
+  // by an impossible unit conversion). Not persisted — merged into the
+  // response so the UI can say "units differ" instead of silently over-asking.
+  const partialByIngredient = new Map<number, boolean>();
   if (!isPastWeek) {
     const computed = await computeShoppingItems(planId);
     staples = computed.staples;
+    for (const it of computed.items) partialByIngredient.set(it.ingredientId, it.partial);
     await reconcileShoppingItems(planId, computed.items);
   }
   const rows = await prisma.shoppingItem.findMany({
@@ -310,7 +344,10 @@ export async function getShoppingList(planId: number) {
     include: { ingredient: true },
     orderBy: { ingredient: { category: "asc" } },
   });
-  return { items: rows, staples };
+  return {
+    items: rows.map((r) => ({ ...r, partial: partialByIngredient.get(r.ingredientId) ?? false })),
+    staples,
+  };
 }
 
 // The list is now always live on read, so "generate" is just a recompute.

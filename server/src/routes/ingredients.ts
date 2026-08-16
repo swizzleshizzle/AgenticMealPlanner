@@ -8,6 +8,7 @@ const FIELDS = [
   "defaultLocation", "densityGPerMl", "gramsPerCount",
   "shelfLifeFridgeDays", "shelfLifeFreezerDays", "shelfLifePantryDays",
   "lowStockThreshold", "lowStockUnit", "isOneOff",
+  "purchaseUnitName", "purchaseUnitQty",
 ] as const;
 
 function pickFields(body: any): Record<string, unknown> {

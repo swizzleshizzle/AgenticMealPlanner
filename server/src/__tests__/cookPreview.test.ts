@@ -105,6 +105,83 @@ describe("buildCookPreview", () => {
     expect(p.requestedUnit).toBe("g");
   });
 
+  it("projects remaining sequentially when two lines deduct from the same pantry card", () => {
+    // Fresh onion + "onion powder → onion" both hit the onion card. The second
+    // row's projection must account for the first row's deduction — previewing
+    // each against the original total is how the modal lied about 0.36 lb left.
+    const cards = [card({ ingredientId: 50, name: "onion", batches: [{ id: 9, quantity: 500, unit: "g", expirationDate: null, tags: [] }], totalsByUnit: [{ unit: "g", qty: 500 }] })];
+    const [first, second] = buildCookPreview(
+      [
+        line({ ingredientId: 50, name: "onion", quantity: 100, unit: "g" }),
+        line({ ingredientId: 50, name: "onion", quantity: 200, unit: "g" }),
+      ],
+      cards,
+    );
+    expect(first.projectedRemaining).toEqual({ qty: 400, unit: "g" });
+    expect(second.projectedRemaining).toEqual({ qty: 200, unit: "g" });
+  });
+
+  it("excluded lines do not consume from the running projection", () => {
+    // An estimated (not-included-by-default) line must not shrink what the
+    // next included line sees — the projection mirrors the default selection.
+    const cards = [card({ ingredientId: 51, name: "garlic", category: "produce", defaultUnit: "count", batches: [{ id: 10, quantity: 4, unit: "bulb", expirationDate: null, tags: [] }], totalsByUnit: [{ unit: "bulb", qty: 4 }] })];
+    const [estimated, exact] = buildCookPreview(
+      [
+        line({ ingredientId: 51, name: "garlic", quantity: 3, unit: "tbsp" }), // cross-family, no density → estimated
+        line({ ingredientId: 51, name: "garlic", quantity: 1, unit: "bulb" }),
+      ],
+      cards,
+    );
+    expect(estimated.included).toBe(false);
+    expect(exact.projectedRemaining).toEqual({ qty: 3, unit: "bulb" });
+  });
+
+  it("estimated confidence from a low-certainty match defaults to not included", () => {
+    const cards = [card({ ingredientId: 21, name: "milk", batches: [{ id: 6, quantity: 1000, unit: "ml", expirationDate: null, tags: [] }], totalsByUnit: [{ unit: "ml", qty: 1000 }] })];
+    const [p] = buildCookPreview([line({ ingredientId: 98, name: "milk chocolate bar", quantity: 50, unit: "ml" })], cards);
+    expect(p.confidence).toBe("estimated");
+    expect(p.included).toBe(false);
+  });
+
+  it("estimated confidence from a coarse unit guess defaults to not included", () => {
+    const cards = [card({ ingredientId: 13, name: "garlic", category: "produce", defaultUnit: "count", batches: [{ id: 4, quantity: 1, unit: "bulb", expirationDate: null, tags: [] }], totalsByUnit: [{ unit: "bulb", qty: 1 }] })];
+    const [p] = buildCookPreview([line({ ingredientId: 13, name: "garlic", quantity: 3, unit: "tbsp" })], cards);
+    expect(p.confidence).toBe("estimated");
+    expect(p.included).toBe(false);
+  });
+
+  it("prefers a batch whose unit converts from the recipe unit over the FEFO-first batch", () => {
+    // Brioche buns: a 0.25-"package" batch sorts first (FEFO) but a count need
+    // can't convert to packages. The preview must deduct in the compatible
+    // count batch's unit instead of estimating against the package batch.
+    const cards = [card({
+      ingredientId: 60, name: "brioche bun", category: "grain", defaultUnit: "count",
+      batches: [
+        { id: 11, quantity: 0.25, unit: "package", expirationDate: new Date("2026-05-01Z"), tags: [] },
+        { id: 12, quantity: 8, unit: "count", expirationDate: null, tags: [] },
+      ],
+      totalsByUnit: [{ unit: "package", qty: 0.25 }, { unit: "count", qty: 8 }],
+    })];
+    const [p] = buildCookPreview([line({ ingredientId: 60, name: "brioche bun", quantity: 2, unit: "count" })], cards);
+    expect(p.deductUnit).toBe("count");
+    expect(p.deductQuantity).toBe(2);
+    expect(p.confidence).toBe("exact");
+    expect(p.included).toBe(true);
+    expect(p.projectedRemaining).toEqual({ qty: 6, unit: "count" });
+  });
+
+  it("falls back to an excluded estimate when only container batches exist for a count need", () => {
+    const cards = [card({
+      ingredientId: 61, name: "tortilla", category: "grain", defaultUnit: "count",
+      batches: [{ id: 13, quantity: 2, unit: "package", expirationDate: null, tags: [] }],
+      totalsByUnit: [{ unit: "package", qty: 2 }],
+    })];
+    const [p] = buildCookPreview([line({ ingredientId: 61, name: "tortilla", quantity: 3, unit: "count" })], cards);
+    expect(p.confidence).toBe("estimated");
+    expect(p.included).toBe(false);
+    expect(p.deductUnit).toBe("package");
+  });
+
   it("alias map resolves a line to its canonical pantry ingredient as exact", () => {
     const cards = [card({ ingredientId: 40, name: "tomato", batches: [{ id: 7, quantity: 400, unit: "g", expirationDate: null, tags: [] }], totalsByUnit: [{ unit: "g", qty: 400 }] })];
     const aliasMap = new Map<string, number>([["diced tomato", 40]]);

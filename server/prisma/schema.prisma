@@ -134,6 +134,12 @@ model Ingredient {
   lowStockUnit         String?         @map("low_stock_unit")
   isOneOff             Boolean         @default(false) @map("is_one_off")
 
+  // How the store sells this ingredient, for shopping-list display:
+  // purchaseUnitName is the label ("1-lb pack", "bunch", "bottle") and
+  // purchaseUnitQty is how much of defaultUnit one such unit contains.
+  purchaseUnitName String? @map("purchase_unit_name")
+  purchaseUnitQty  Float?  @map("purchase_unit_qty")
+
   mealIngredients MealIngredient[]
   pantryBatches   PantryBatch[]
   shoppingItems   ShoppingItem[]

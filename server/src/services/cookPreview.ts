@@ -78,6 +78,16 @@ export function buildCookPreview(
   const byId = new Map(cards.map((c) => [c.ingredientId, c]));
   const candidates = cards.map((c) => ({ id: c.ingredientId, name: c.name }));
 
+  // Running per-card totals so lines that share a pantry card project
+  // sequentially — each row's "left after" accounts for the rows above it.
+  // Only rows included by default consume from the projection.
+  const running = new Map<string, number>();
+  const remainingOf = (cardId: number, unit: string, initial: number): number => {
+    const key = `${cardId}:${unit}`;
+    if (!running.has(key)) running.set(key, initial);
+    return running.get(key)!;
+  };
+
   return lines.map((line) => {
     // --- Resolve which pantry card this line points to ----------------------
     let card: PantryCardLite | undefined;
@@ -124,37 +134,52 @@ export function buildCookPreview(
       };
     }
 
-    // --- Compute the deduction in the pantry's native (FEFO-first) unit -----
-    const deductUnit = card.batches[0].unit;
+    // --- Compute the deduction in the pantry's native unit ------------------
+    // Prefer the first (FEFO-ordered) batch whose unit the recipe amount can
+    // actually convert to — a count need must not be estimated against a
+    // "package" batch when a count batch sits right behind it.
     const hint = { densityGPerMl: card.densityGPerMl, gramsPerCount: card.gramsPerCount };
+    const compatibleBatch = card.batches.find((b) => {
+      try {
+        convert(line.quantity, line.unit, b.unit, hint);
+        return true;
+      } catch (e) {
+        if (e instanceof UnitConversionError) return false;
+        throw e;
+      }
+    });
+    const deductUnit = (compatibleBatch ?? card.batches[0]).unit;
     const fromType = safeUnitType(line.unit);
     const toType = safeUnitType(deductUnit);
     const sameFamily = fromType != null && toType != null && fromType === toType;
 
     let deductQuantity: number;
     let conversionTier: "exact" | "converted" | "estimated";
-    if (sameFamily) {
+    try {
       deductQuantity = convert(line.quantity, line.unit, deductUnit, hint);
-      conversionTier = "exact";
-    } else {
-      try {
-        deductQuantity = convert(line.quantity, line.unit, deductUnit, hint);
-        conversionTier = "converted";
-      } catch (e) {
-        if (!(e instanceof UnitConversionError)) throw e;
-        deductQuantity = ESTIMATE_FRACTION[card.category] ?? 0.25;
-        conversionTier = "estimated";
-      }
+      conversionTier = sameFamily ? "exact" : "converted";
+    } catch (e) {
+      if (!(e instanceof UnitConversionError)) throw e;
+      deductQuantity = ESTIMATE_FRACTION[card.category] ?? 0.25;
+      conversionTier = "estimated";
     }
 
     // A shaky *match* downgrades an otherwise-clean conversion.
     const confidence: CookConfidence = matchCertainty === "low" ? "estimated" : conversionTier;
 
+    // Estimated rows (shaky match or guessed conversion) are surfaced for
+    // review but never auto-applied — the user opts in.
+    const included = confidence === "exact" || confidence === "converted";
+
     // Projected remaining only when the deduct unit lines up with a single total.
     const totalInDeductUnit = card.totalsByUnit.find((t) => t.unit === deductUnit);
-    const projectedRemaining = totalInDeductUnit
-      ? { qty: round(Math.max(0, totalInDeductUnit.qty - deductQuantity)), unit: deductUnit }
-      : null;
+    let projectedRemaining: { qty: number; unit: string } | null = null;
+    if (totalInDeductUnit) {
+      const before = remainingOf(card.ingredientId, deductUnit, totalInDeductUnit.qty);
+      const after = Math.max(0, before - deductQuantity);
+      if (included) running.set(`${card.ingredientId}:${deductUnit}`, after);
+      projectedRemaining = { qty: round(after), unit: deductUnit };
+    }
 
     return {
       ...base,
@@ -166,7 +191,7 @@ export function buildCookPreview(
       deductUnit,
       pantryTotals: card.totalsByUnit,
       projectedRemaining,
-      included: true,
+      included,
     };
   });
 }

@@ -9,7 +9,7 @@ export class UnitConversionError extends Error {
   constructor(
     public fromUnit: string,
     public toUnit: string,
-    public missing: "densityGPerMl" | "gramsPerCount" | "unknownUnit",
+    public missing: "densityGPerMl" | "gramsPerCount" | "unknownUnit" | "containerSize",
     message?: string,
   ) {
     super(message ?? `Cannot convert ${fromUnit} to ${toUnit}: ${missing}`);
@@ -57,6 +57,18 @@ const COUNT: Record<string, number> = {
   block: 1,
   thumb: 1,
 };
+
+// Container-style count units. A container is not an item — 1 package of buns
+// is several buns — so these convert 1:1 among themselves ("one retail
+// container") but refuse conversion to each-like count units and refuse the
+// gramsPerCount bridge (which describes one *item*, not one container).
+// Without this split, draining a "0.25 package" batch counted as 0.25 items
+// and the deduction kept going into the next batch: a double charge.
+const CONTAINER_UNITS = new Set(["packet", "package", "pack", "can", "bag", "block"]);
+
+function isContainerUnit(normalized: string): boolean {
+  return CONTAINER_UNITS.has(normalized);
+}
 
 // Aliases users actually type. Lowercased, stripped of dots and spaces.
 const ALIASES: Record<string, string> = {
@@ -140,11 +152,23 @@ export function convert(
   if (fromUnit === toUnit) return value;
   const from = classify(fromUnit);
   const to = classify(toUnit);
+  const fromContainer = from.type === "count" && isContainerUnit(normalize(fromUnit));
+  const toContainer = to.type === "count" && isContainerUnit(normalize(toUnit));
   // Convert to canonical base of `from.type`.
   const canonicalFrom = value * from.canonicalPerUnit;
 
   if (from.type === to.type) {
+    if (fromContainer !== toContainer) {
+      // container ↔ each-like: the ratio is a per-ingredient package size we
+      // don't know, not 1:1.
+      throw new UnitConversionError(fromUnit, toUnit, "containerSize");
+    }
     return canonicalFrom / to.canonicalPerUnit;
+  }
+
+  // Container units never bridge cross-type: gramsPerCount is per item.
+  if (fromContainer || toContainer) {
+    throw new UnitConversionError(fromUnit, toUnit, "containerSize");
   }
 
   // Cross-type. Need to bridge through grams using density / gramsPerCount.

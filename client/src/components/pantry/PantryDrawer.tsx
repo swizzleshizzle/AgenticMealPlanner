@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { X, Settings } from "lucide-react";
 import type { PantryCard } from "../../api/pantry";
+import { formatQuantity } from "../../lib/formatQuantity";
 import { deleteBatch, restoreBatch } from "../../api/pantry";
 import { useToast } from "../ui/ToastProvider";
 import Button from "../ui/Button";
@@ -69,7 +70,7 @@ export default function PantryDrawer({ card, onClose, onChanged }: Props) {
               <div>
                 On hand: {card.totalsByUnit.length === 0
                   ? "—"
-                  : card.totalsByUnit.map((t) => `${formatQty(t.qty)} ${t.unit}`).join(" · ")}
+                  : card.totalsByUnit.map((t) => `${formatQuantity(t.qty)} ${t.unit}`).join(" · ")}
               </div>
               <div>Soonest expiration: {card.nextExpirationDays != null ? `${card.nextExpirationDays}d` : "—"}</div>
               <div>Running low: {card.isLowStock ? "yes" : "no"}</div>
@@ -144,7 +145,3 @@ export default function PantryDrawer({ card, onClose, onChanged }: Props) {
   );
 }
 
-function formatQty(q: number): string {
-  if (Math.abs(q - Math.round(q)) < 1e-6) return String(Math.round(q));
-  return q.toFixed(2).replace(/\.?0+$/, "");
-}

@@ -26,6 +26,8 @@ export default function IngredientEditForm({ ingredient, onCancel, onSaved }: Pr
   const [shelfPantry, setShelfPantry] = useState<string>(ingredient.shelfLifePantryDays?.toString() ?? "");
   const [lowStockThreshold, setLowStockThreshold] = useState<string>(ingredient.lowStockThreshold?.toString() ?? "");
   const [lowStockUnit, setLowStockUnit] = useState(ingredient.lowStockUnit ?? "");
+  const [purchaseUnitName, setPurchaseUnitName] = useState(ingredient.purchaseUnitName ?? "");
+  const [purchaseUnitQty, setPurchaseUnitQty] = useState<string>(ingredient.purchaseUnitQty?.toString() ?? "");
 
   const toNum = (s: string) => s === "" ? null : Number(s);
 
@@ -42,6 +44,8 @@ export default function IngredientEditForm({ ingredient, onCancel, onSaved }: Pr
       shelfLifePantryDays: toNum(shelfPantry),
       lowStockThreshold: toNum(lowStockThreshold),
       lowStockUnit: lowStockUnit || null,
+      purchaseUnitName: purchaseUnitName.trim() || null,
+      purchaseUnitQty: toNum(purchaseUnitQty),
     });
     onSaved();
   };
@@ -65,6 +69,26 @@ export default function IngredientEditForm({ ingredient, onCancel, onSaved }: Pr
           </select>
         </Field>
         <Field label="Density (g/mL)"><input type="number" step="0.001" value={densityGPerMl} onChange={(e) => setDensityGPerMl(e.target.value)} className={inputCls} /></Field>
+        <Field label="Sold as">
+          <input
+            aria-label="Sold as (retail label, e.g. 1-lb pack)"
+            value={purchaseUnitName}
+            onChange={(e) => setPurchaseUnitName(e.target.value)}
+            placeholder="e.g. 1-lb pack, bunch"
+            className={inputCls}
+          />
+        </Field>
+        <Field label={`Holds (${defaultUnit || "default unit"})`}>
+          <input
+            aria-label="Holds (how much of the default unit one retail unit contains)"
+            type="number"
+            step="0.01"
+            min={0}
+            value={purchaseUnitQty}
+            onChange={(e) => setPurchaseUnitQty(e.target.value)}
+            className={inputCls}
+          />
+        </Field>
         <Field label="Grams per count"><input type="number" step="0.1" value={gramsPerCount} onChange={(e) => setGramsPerCount(e.target.value)} className={inputCls} /></Field>
         <Field label="Shelf life (fridge, days)"><input type="number" min={0} value={shelfFridge} onChange={(e) => setShelfFridge(e.target.value)} className={inputCls} /></Field>
         <Field label="Shelf life (freezer, days)"><input type="number" min={0} value={shelfFreezer} onChange={(e) => setShelfFreezer(e.target.value)} className={inputCls} /></Field>

@@ -21,6 +21,9 @@ export interface Ingredient {
   lowStockThreshold: number | null;
   lowStockUnit: string | null;
   isOneOff: boolean;
+  /** Retail display for shopping: label ("1-lb pack") + how much of defaultUnit it holds. */
+  purchaseUnitName: string | null;
+  purchaseUnitQty: number | null;
 }
 
 export interface IngredientUpdate {
@@ -36,6 +39,8 @@ export interface IngredientUpdate {
   lowStockThreshold?: number | null;
   lowStockUnit?: string | null;
   isOneOff?: boolean;
+  purchaseUnitName?: string | null;
+  purchaseUnitQty?: number | null;
 }
 
 export const getIngredients = (opts: { includeOneOffs?: boolean } = {}) =>
