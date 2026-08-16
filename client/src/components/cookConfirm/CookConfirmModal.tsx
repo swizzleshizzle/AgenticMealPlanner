@@ -6,6 +6,7 @@ import type { Ingredient } from "../../api/ingredients";
 import CookConfirmRow, { type CookConfirmRowState, type PantryHint } from "./CookConfirmRow";
 import AddIngredientRow from "./AddIngredientRow";
 import Button from "../ui/Button";
+import { formatQuantity, roundQuantity } from "../../lib/formatQuantity";
 import ConfirmStep from "./ConfirmStep";
 import type { ConfirmRowState } from "./ConfirmRow";
 import type { CookPreviewInputLine, CookPreviewLine } from "../../api/plans";
@@ -31,20 +32,12 @@ function unitOptionsFor(unit: string, ingredientDefaultUnit: string): string[] {
   return Array.from(new Set([unit, ...fallback]));
 }
 
-function formatQty(n: number): string {
-  if (n === Math.floor(n)) return String(n);
-  return n.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
-}
 
 function formatTotalsByUnit(card: PantryCard | undefined): PantryHint {
   if (!card || card.batchCount === 0) return { text: "pantry: none", warn: false };
-  const parts = card.totalsByUnit.map((t) => `${formatQty(t.qty)} ${t.unit}`);
+  const parts = card.totalsByUnit.map((t) => `${formatQuantity(t.qty)} ${t.unit}`);
   const suffix = card.batchCount > 1 ? ` (${card.batchCount} batches)` : "";
   return { text: `pantry: ${parts.join(" · ")}${suffix}`, warn: false };
-}
-
-function roundQty(n: number): number {
-  return Math.round(n * 100) / 100;
 }
 
 let adhocCounter = 0;
@@ -69,7 +62,7 @@ export default function CookConfirmModal({ pm, pantryByIngredient, pantryCards, 
       ingredientId: mi.ingredient.id,
       ingredientName: mi.ingredient.name,
       ingredientDefaultUnit: mi.ingredient.defaultUnit,
-      quantity: roundQty(mi.quantity * multiplier),
+      quantity: roundQuantity(mi.quantity * multiplier),
       unit: mi.unit,
       checked: true,
       adhoc: false,
@@ -133,7 +126,7 @@ export default function CookConfirmModal({ pm, pantryByIngredient, pantryCards, 
           matchedIngredientId: p.matchedIngredientId,
           matchedName: p.matchedName,
           confidence: p.confidence,
-          deductQuantity: p.deductQuantity,
+          deductQuantity: roundQuantity(p.deductQuantity),
           deductUnit: p.deductUnit,
           pantryTotals: p.pantryTotals,
           projectedRemaining: p.projectedRemaining,

@@ -121,6 +121,75 @@ describe("aggregateShoppingItems", () => {
   });
 });
 
+describe("aggregateShoppingItems — alias canonicalization", () => {
+  // "chicken cutlet" (300) is an alias of "chicken breast" (301): needs and
+  // on-hand for either id must pool under the canonical id (301).
+  const ALIAS_META: AggregateInput["ingredients"] = [
+    { id: 300, defaultUnit: "oz" },
+    { id: 301, defaultUnit: "oz" },
+  ];
+  const canonicalIds = new Map([[300, 301]]);
+
+  function mealNeeding(ingredientId: number, quantity: number, unit = "oz"): AggregateInput["plannedMeals"][number] {
+    return {
+      cookStyle: "cook_fresh",
+      servings: 2,
+      meal: { servings: 2, ingredients: [{ ingredientId, quantity, unit }] },
+    };
+  }
+
+  it("credits pantry stock of the canonical ingredient against an aliased need", () => {
+    const result = aggregateShoppingItems({
+      plannedMeals: [mealNeeding(300, 42)], // recipe says "chicken cutlet"
+      pantryItems: [{ ingredientId: 301, quantity: 1.25, unit: "lb" }], // fridge has breast
+      ingredients: ALIAS_META,
+      canonicalIds,
+    });
+    expect(result.items).toHaveLength(1);
+    const item = result.items[0];
+    expect(item.ingredientId).toBe(301); // reported under the canonical ingredient
+    expect(item.quantityNeeded).toBeCloseTo(42, 5);
+    expect(item.quantityOnHand).toBeCloseTo(20, 5); // 1.25 lb = 20 oz
+    expect(item.quantityToBuy).toBeCloseTo(22, 5);
+  });
+
+  it("pools needs from alias and canonical ingredients into one line", () => {
+    const result = aggregateShoppingItems({
+      plannedMeals: [mealNeeding(300, 12), mealNeeding(301, 10)],
+      pantryItems: [],
+      ingredients: ALIAS_META,
+      canonicalIds,
+    });
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].ingredientId).toBe(301);
+    expect(result.items[0].quantityNeeded).toBeCloseTo(22, 5);
+  });
+
+  it("uses the canonical ingredient's conversion metadata", () => {
+    // Alias id 300 has no meta of its own beyond oz; the canonical target's
+    // defaultUnit (lb here) must win for the combined line.
+    const result = aggregateShoppingItems({
+      plannedMeals: [mealNeeding(300, 16, "oz")],
+      pantryItems: [],
+      ingredients: [{ id: 301, defaultUnit: "lb" }],
+      canonicalIds,
+    });
+    expect(result.items[0].ingredientId).toBe(301);
+    expect(result.items[0].unit).toBe("lb");
+    expect(result.items[0].quantityNeeded).toBeCloseTo(1, 5);
+  });
+
+  it("routes descriptor-unit staples through the canonical id", () => {
+    const result = aggregateShoppingItems({
+      plannedMeals: [mealNeeding(300, 1, "to taste")],
+      pantryItems: [],
+      ingredients: ALIAS_META,
+      canonicalIds,
+    });
+    expect(result.staples).toEqual([301]);
+  });
+});
+
 describe("aggregateShoppingItems — staples & estimates", () => {
   const SALT_META: AggregateInput["ingredients"] = [{ id: 200, defaultUnit: "tsp" }];
 

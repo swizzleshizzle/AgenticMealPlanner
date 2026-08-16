@@ -78,6 +78,16 @@ export function buildCookPreview(
   const byId = new Map(cards.map((c) => [c.ingredientId, c]));
   const candidates = cards.map((c) => ({ id: c.ingredientId, name: c.name }));
 
+  // Running per-card totals so lines that share a pantry card project
+  // sequentially — each row's "left after" accounts for the rows above it.
+  // Only rows included by default consume from the projection.
+  const running = new Map<string, number>();
+  const remainingOf = (cardId: number, unit: string, initial: number): number => {
+    const key = `${cardId}:${unit}`;
+    if (!running.has(key)) running.set(key, initial);
+    return running.get(key)!;
+  };
+
   return lines.map((line) => {
     // --- Resolve which pantry card this line points to ----------------------
     let card: PantryCardLite | undefined;
@@ -150,11 +160,19 @@ export function buildCookPreview(
     // A shaky *match* downgrades an otherwise-clean conversion.
     const confidence: CookConfidence = matchCertainty === "low" ? "estimated" : conversionTier;
 
+    // Estimated rows (shaky match or guessed conversion) are surfaced for
+    // review but never auto-applied — the user opts in.
+    const included = confidence === "exact" || confidence === "converted";
+
     // Projected remaining only when the deduct unit lines up with a single total.
     const totalInDeductUnit = card.totalsByUnit.find((t) => t.unit === deductUnit);
-    const projectedRemaining = totalInDeductUnit
-      ? { qty: round(Math.max(0, totalInDeductUnit.qty - deductQuantity)), unit: deductUnit }
-      : null;
+    let projectedRemaining: { qty: number; unit: string } | null = null;
+    if (totalInDeductUnit) {
+      const before = remainingOf(card.ingredientId, deductUnit, totalInDeductUnit.qty);
+      const after = Math.max(0, before - deductQuantity);
+      if (included) running.set(`${card.ingredientId}:${deductUnit}`, after);
+      projectedRemaining = { qty: round(after), unit: deductUnit };
+    }
 
     return {
       ...base,
@@ -166,7 +184,7 @@ export function buildCookPreview(
       deductUnit,
       pantryTotals: card.totalsByUnit,
       projectedRemaining,
-      included: true,
+      included,
     };
   });
 }

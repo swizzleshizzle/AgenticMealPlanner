@@ -1,4 +1,5 @@
 import type { ShoppingItem } from "../api/shopping";
+import { formatQuantity } from "../lib/formatQuantity";
 
 interface Props {
   item: ShoppingItem;
@@ -17,10 +18,10 @@ export default function ShoppingItemRow({ item, onToggle }: Props) {
         <span className="text-xs text-gray-400">{item.ingredient.category}</span>
       </div>
       <div className="text-sm text-gray-600">
-        <span className="font-medium">{item.quantityToBuy}</span>
+        <span className="font-medium">{formatQuantity(item.quantityToBuy)}</span>
         <span className="text-gray-400"> {item.ingredient.defaultUnit}</span>
         {item.quantityOnHand > 0 && (
-          <span className="text-xs text-gray-400 ml-2">(have {item.quantityOnHand})</span>
+          <span className="text-xs text-gray-400 ml-2">(have {formatQuantity(item.quantityOnHand)})</span>
         )}
       </div>
     </div>

@@ -2,6 +2,7 @@
 import { Refrigerator, Snowflake, BookMarked, Package } from "lucide-react";
 import type { PantryCard as PantryCardData } from "../../api/pantry";
 import Pill from "../ui/Pill";
+import { formatQuantity } from "../../lib/formatQuantity";
 
 const LOC_ICON: Record<string, typeof Refrigerator> = {
   fridge: Refrigerator,
@@ -71,12 +72,8 @@ export default function PantryCard({ card, onOpen }: Props) {
   );
 }
 
-function formatQty(q: number): string {
-  if (Math.abs(q - Math.round(q)) < 1e-6) return String(Math.round(q));
-  return q.toFixed(2).replace(/\.?0+$/, "");
-}
 
 function formatTotals(totals: Array<{ unit: string; qty: number }>) {
   if (totals.length === 0) return <span className="text-ink-3">—</span>;
-  return totals.map((t) => `${formatQty(t.qty)} ${t.unit}`).join(" · ");
+  return totals.map((t) => `${formatQuantity(t.qty)} ${t.unit}`).join(" · ");
 }

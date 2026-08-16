@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import type { PantryBatch } from "../../api/pantry";
+import { formatQuantity } from "../../lib/formatQuantity";
 import Pill from "../ui/Pill";
 
 interface Props {
@@ -20,7 +21,7 @@ export default function BatchRow({ batch, onEdit, onDelete }: Props) {
     <div className="bg-surface-2 border border-line-soft rounded-[10px] p-3 flex flex-col gap-2">
       <div className="flex items-start justify-between gap-2">
         <div className="text-[13px] text-ink-1 tabular-nums">
-          {batch.quantity} {batch.unit} · <span className="capitalize">{batch.location}</span>
+          {formatQuantity(batch.quantity)} {batch.unit} · <span className="capitalize">{batch.location}</span>
         </div>
         <div className="flex gap-1.5">
           {days != null && (

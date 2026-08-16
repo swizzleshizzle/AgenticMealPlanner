@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { formatQuantity } from "../lib/formatQuantity";
 import { RefreshCw, CheckCircle2, Check, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import {
   formatLocalDate,
@@ -453,8 +454,8 @@ function Row({
         {item.quantityNeeded === 0
           ? "qty?"
           : item.quantityToBuy > 0
-            ? `${item.quantityToBuy} ${item.ingredient.defaultUnit ?? ""}`
-            : `Have ${item.quantityNeeded} ${item.ingredient.defaultUnit ?? ""}`}
+            ? `${formatQuantity(item.quantityToBuy)} ${item.ingredient.defaultUnit ?? ""}`
+            : `Have ${formatQuantity(item.quantityNeeded)} ${item.ingredient.defaultUnit ?? ""}`}
       </div>
     </Wrapper>
   );

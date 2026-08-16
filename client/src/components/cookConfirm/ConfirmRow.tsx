@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
 import type { CookConfidence } from "../../api/plans";
+import { formatQuantity } from "../../lib/formatQuantity";
 
 export interface ConfirmRowState {
   key: string;
@@ -22,10 +23,6 @@ const TIER_LABEL: Record<CookConfidence, string> = {
   none: "not in pantry",
 };
 
-function fmt(n: number): string {
-  if (n === Math.floor(n)) return String(n);
-  return n.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
-}
 
 interface Props {
   row: ConfirmRowState;
@@ -39,7 +36,7 @@ export default function ConfirmRow({ row, unitOptions, onChange, onPick }: Props
   const flagged = row.confidence === "estimated" || row.confidence === "converted";
   const noMatch = row.confidence === "none" || row.matchedIngredientId === null;
 
-  const totals = row.pantryTotals.map((t) => `${fmt(t.qty)} ${t.unit}`).join(" · ") || "none";
+  const totals = row.pantryTotals.map((t) => `${formatQuantity(t.qty)} ${t.unit}`).join(" · ") || "none";
 
   return (
     <div className="grid grid-cols-[18px_1fr_64px_88px] gap-2.5 items-center px-1 py-2.5 border-b border-line-soft">
@@ -70,7 +67,7 @@ export default function ConfirmRow({ row, unitOptions, onChange, onPick }: Props
             <>
               pantry: {totals}
               {row.projectedRemaining && (
-                <> · → {fmt(row.projectedRemaining.qty)} {row.projectedRemaining.unit} left</>
+                <> · → {formatQuantity(row.projectedRemaining.qty)} {row.projectedRemaining.unit} left</>
               )}
               {TIER_LABEL[row.confidence] && <> · ⚠ {TIER_LABEL[row.confidence]}</>}
             </>
