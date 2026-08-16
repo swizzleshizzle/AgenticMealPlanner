@@ -150,6 +150,38 @@ describe("buildCookPreview", () => {
     expect(p.included).toBe(false);
   });
 
+  it("prefers a batch whose unit converts from the recipe unit over the FEFO-first batch", () => {
+    // Brioche buns: a 0.25-"package" batch sorts first (FEFO) but a count need
+    // can't convert to packages. The preview must deduct in the compatible
+    // count batch's unit instead of estimating against the package batch.
+    const cards = [card({
+      ingredientId: 60, name: "brioche bun", category: "grain", defaultUnit: "count",
+      batches: [
+        { id: 11, quantity: 0.25, unit: "package", expirationDate: new Date("2026-05-01Z"), tags: [] },
+        { id: 12, quantity: 8, unit: "count", expirationDate: null, tags: [] },
+      ],
+      totalsByUnit: [{ unit: "package", qty: 0.25 }, { unit: "count", qty: 8 }],
+    })];
+    const [p] = buildCookPreview([line({ ingredientId: 60, name: "brioche bun", quantity: 2, unit: "count" })], cards);
+    expect(p.deductUnit).toBe("count");
+    expect(p.deductQuantity).toBe(2);
+    expect(p.confidence).toBe("exact");
+    expect(p.included).toBe(true);
+    expect(p.projectedRemaining).toEqual({ qty: 6, unit: "count" });
+  });
+
+  it("falls back to an excluded estimate when only container batches exist for a count need", () => {
+    const cards = [card({
+      ingredientId: 61, name: "tortilla", category: "grain", defaultUnit: "count",
+      batches: [{ id: 13, quantity: 2, unit: "package", expirationDate: null, tags: [] }],
+      totalsByUnit: [{ unit: "package", qty: 2 }],
+    })];
+    const [p] = buildCookPreview([line({ ingredientId: 61, name: "tortilla", quantity: 3, unit: "count" })], cards);
+    expect(p.confidence).toBe("estimated");
+    expect(p.included).toBe(false);
+    expect(p.deductUnit).toBe("package");
+  });
+
   it("alias map resolves a line to its canonical pantry ingredient as exact", () => {
     const cards = [card({ ingredientId: 40, name: "tomato", batches: [{ id: 7, quantity: 400, unit: "g", expirationDate: null, tags: [] }], totalsByUnit: [{ unit: "g", qty: 400 }] })];
     const aliasMap = new Map<string, number>([["diced tomato", 40]]);

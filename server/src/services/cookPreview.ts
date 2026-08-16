@@ -134,27 +134,34 @@ export function buildCookPreview(
       };
     }
 
-    // --- Compute the deduction in the pantry's native (FEFO-first) unit -----
-    const deductUnit = card.batches[0].unit;
+    // --- Compute the deduction in the pantry's native unit ------------------
+    // Prefer the first (FEFO-ordered) batch whose unit the recipe amount can
+    // actually convert to — a count need must not be estimated against a
+    // "package" batch when a count batch sits right behind it.
     const hint = { densityGPerMl: card.densityGPerMl, gramsPerCount: card.gramsPerCount };
+    const compatibleBatch = card.batches.find((b) => {
+      try {
+        convert(line.quantity, line.unit, b.unit, hint);
+        return true;
+      } catch (e) {
+        if (e instanceof UnitConversionError) return false;
+        throw e;
+      }
+    });
+    const deductUnit = (compatibleBatch ?? card.batches[0]).unit;
     const fromType = safeUnitType(line.unit);
     const toType = safeUnitType(deductUnit);
     const sameFamily = fromType != null && toType != null && fromType === toType;
 
     let deductQuantity: number;
     let conversionTier: "exact" | "converted" | "estimated";
-    if (sameFamily) {
+    try {
       deductQuantity = convert(line.quantity, line.unit, deductUnit, hint);
-      conversionTier = "exact";
-    } else {
-      try {
-        deductQuantity = convert(line.quantity, line.unit, deductUnit, hint);
-        conversionTier = "converted";
-      } catch (e) {
-        if (!(e instanceof UnitConversionError)) throw e;
-        deductQuantity = ESTIMATE_FRACTION[card.category] ?? 0.25;
-        conversionTier = "estimated";
-      }
+      conversionTier = sameFamily ? "exact" : "converted";
+    } catch (e) {
+      if (!(e instanceof UnitConversionError)) throw e;
+      deductQuantity = ESTIMATE_FRACTION[card.category] ?? 0.25;
+      conversionTier = "estimated";
     }
 
     // A shaky *match* downgrades an otherwise-clean conversion.

@@ -68,8 +68,8 @@ describe("convert", () => {
 });
 
 describe("discrete count units", () => {
-  it.each(["whole", "packet", "package", "pack", "clove", "cloves", "slice", "head", "can", "ear", "bag", "block", "thumb"])(
-    "%s converts to count 1:1",
+  it.each(["whole", "clove", "cloves", "slice", "head", "ear", "thumb"])(
+    "each-like unit %s converts to count 1:1",
     (u) => {
       expect(convert(2, u, "count")).toBe(2);
     },
@@ -77,6 +77,30 @@ describe("discrete count units", () => {
 
   it("count-family units interconvert (whole -> unit)", () => {
     expect(convert(3, "whole", "unit")).toBe(3);
+  });
+
+  // A container is not an item: 1 package of buns ≠ 1 bun. Pretending they
+  // convert 1:1 is how a cook double-charged the pantry (drained a 0.25
+  // "package" batch as 0.25 buns, then kept going into the count batch).
+  it.each(["packet", "package", "pack", "can", "bag", "block"])(
+    "container unit %s refuses conversion to count",
+    (u) => {
+      expect(() => convert(2, u, "count")).toThrow(UnitConversionError);
+      expect(() => convert(2, "count", u)).toThrow(UnitConversionError);
+    },
+  );
+
+  it("container units interconvert 1:1 (both mean one retail container)", () => {
+    expect(convert(2, "pack", "package")).toBe(2);
+    expect(convert(1, "can", "bag")).toBe(1);
+  });
+
+  it("container units refuse the gramsPerCount bridge (it describes one item, not one container)", () => {
+    expect(() => convert(1, "package", "oz", { gramsPerCount: 80 })).toThrow(UnitConversionError);
+  });
+
+  it("each-like units still bridge to mass via gramsPerCount", () => {
+    expect(convert(2, "count", "oz", { gramsPerCount: 28.3495 })).toBeCloseTo(2, 5);
   });
 });
 
