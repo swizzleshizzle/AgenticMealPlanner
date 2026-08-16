@@ -67,6 +67,8 @@ export interface CreateBatchInput {
     lowStockThreshold?: number | null;
     lowStockUnit?: string | null;
     isOneOff?: boolean;
+    purchaseUnitName?: string | null;
+    purchaseUnitQty?: number | null;
   };
   quantity: number;
   unit: string;

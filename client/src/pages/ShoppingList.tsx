@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { formatQuantity } from "../lib/formatQuantity";
 import { coverageLabel } from "../lib/coverageLabel";
+import { purchaseLabel } from "../lib/purchaseLabel";
 import { RefreshCw, CheckCircle2, Check, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import {
   formatLocalDate,
@@ -485,11 +486,24 @@ function Row({
         {item.ingredient.name}
       </div>
       <div className="text-[12.5px] text-ink-3 tabular-nums text-right">
-        {item.quantityNeeded === 0
-          ? "qty?"
-          : item.quantityToBuy > 0
-            ? `${formatQuantity(item.quantityToBuy)} ${item.ingredient.defaultUnit ?? ""}`
-            : coverageLabel(item.quantityNeeded, item.quantityOnHand, item.ingredient.defaultUnit ?? "")}
+        {(() => {
+          if (item.quantityNeeded === 0) return "qty?";
+          if (item.quantityToBuy <= 0) {
+            return coverageLabel(item.quantityNeeded, item.quantityOnHand, item.ingredient.defaultUnit ?? "");
+          }
+          // Speak "store" when the ingredient knows how it's sold: packs and
+          // bunches up front, the precise recipe amount as fine print.
+          const retail = purchaseLabel(item.quantityToBuy, item.ingredient.defaultUnit ?? "", item.ingredient);
+          if (retail) {
+            return (
+              <>
+                <div className="text-ink-1">{retail.main}</div>
+                <div className="text-[11px]">{retail.detail}</div>
+              </>
+            );
+          }
+          return `${formatQuantity(item.quantityToBuy)} ${item.ingredient.defaultUnit ?? ""}`;
+        })()}
         {item.partial && item.quantityNeeded > 0 && (
           <div className="text-[11px] text-ink-3 italic">units differ — check pantry first</div>
         )}

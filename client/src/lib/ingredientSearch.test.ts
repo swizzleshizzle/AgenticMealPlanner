@@ -9,6 +9,8 @@ const ing = (id: number, name: string, overrides?: Partial<Ingredient>): Ingredi
   category: "other",
   defaultUnit: "count",
   defaultLocation: null,
+  purchaseUnitName: null,
+  purchaseUnitQty: null,
   densityGPerMl: null,
   gramsPerCount: null,
   shelfLifeFridgeDays: null,
