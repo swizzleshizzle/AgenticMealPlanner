@@ -7,6 +7,8 @@ export interface ShoppingItem {
   quantityOnHand: number;
   quantityToBuy: number;
   checked: boolean;
+  /** A pantry or recipe term was skipped by an impossible unit conversion, so the numbers may over-ask. */
+  partial?: boolean;
   ingredient: Ingredient;
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { formatQuantity } from "../lib/formatQuantity";
+import { coverageLabel } from "../lib/coverageLabel";
 import { RefreshCw, CheckCircle2, Check, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import {
   formatLocalDate,
@@ -450,12 +451,15 @@ function Row({
       >
         {item.ingredient.name}
       </div>
-      <div className="text-[12.5px] text-ink-3 tabular-nums">
+      <div className="text-[12.5px] text-ink-3 tabular-nums text-right">
         {item.quantityNeeded === 0
           ? "qty?"
           : item.quantityToBuy > 0
             ? `${formatQuantity(item.quantityToBuy)} ${item.ingredient.defaultUnit ?? ""}`
-            : `Have ${formatQuantity(item.quantityNeeded)} ${item.ingredient.defaultUnit ?? ""}`}
+            : coverageLabel(item.quantityNeeded, item.quantityOnHand, item.ingredient.defaultUnit ?? "")}
+        {item.partial && item.quantityNeeded > 0 && (
+          <div className="text-[11px] text-ink-3 italic">units differ — check pantry first</div>
+        )}
       </div>
     </Wrapper>
   );

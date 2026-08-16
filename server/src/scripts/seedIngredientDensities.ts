@@ -85,6 +85,41 @@ const SEED: Record<string, SeedRow> = {
   "hoisin sauce":          { densityGPerMl: 1.08 },
   "gochujang sauce":       { densityGPerMl: 1.05 },
 
+  // ---- dressings (creamy ≈ 1.00-1.05, vinaigrettes ≈ 0.95; USDA salad-dressing range) ----
+  // These are the fl-oz-bottle / weight-oz-recipe class: without a density the
+  // shopping diff dropped the on-hand credit and re-bought owned bottles.
+  "buttermilk ranch dressing": { densityGPerMl: 1.00 },
+  "blue cheese dressing":      { densityGPerMl: 1.02 },
+  "creamy balsamic dressing":  { densityGPerMl: 1.02 },
+  "honey dijon dressing":      { densityGPerMl: 1.05, note: "honey-sweetened, denser" },
+  "italian dressing":          { densityGPerMl: 0.95, note: "oil-based vinaigrette" },
+  "greek vinaigrette":         { densityGPerMl: 0.95 },
+  "miso ginger dressing":      { densityGPerMl: 1.02 },
+
+  // ---- creams & liquid dairy ----
+  "heavy cream":      { densityGPerMl: 0.994, note: "USDA" },
+  "crème fraîche":    { densityGPerMl: 1.00 },
+  "greek yogurt":     { densityGPerMl: 1.10, note: "strained; see `yogurt` note" },
+  "cream sauce base": { densityGPerMl: 1.00, note: "cream-soup consistency" },
+
+  // ---- stocks & broths (water-like) ----
+  "beef stock":      { densityGPerMl: 1.00 },
+  "chicken stock":   { densityGPerMl: 1.00 },
+  "chicken broth":   { densityGPerMl: 1.00 },
+  "vegetable broth": { densityGPerMl: 1.00 },
+
+  // ---- more sauces & pastes ----
+  "marinara sauce":         { densityGPerMl: 1.03 },
+  "crushed tomato":         { densityGPerMl: 1.04, note: "canned, USDA" },
+  "sweet chili sauce":      { densityGPerMl: 1.15, note: "sugar-syrup based; cf. sweet thai chili" },
+  "ponzu sauce":            { densityGPerMl: 1.10, note: "soy-citrus; lighter than straight soy" },
+  "orange sauce":           { densityGPerMl: 1.15, note: "sweet glaze-style" },
+  "ginger paste":           { densityGPerMl: 1.05 },
+  "szechuan paste":         { densityGPerMl: 1.10 },
+  "guacamole":              { densityGPerMl: 0.96 },
+  "smoky red pepper crema": { densityGPerMl: 1.00 },
+  "green salsa":            { densityGPerMl: 1.04 },
+
   // ---- rices & grains (uncooked, cup default) ----
   "jasmine rice":      { densityGPerMl: 0.782 },
   "basmati rice":      { densityGPerMl: 0.757 },

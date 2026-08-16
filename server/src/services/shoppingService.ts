@@ -329,9 +329,14 @@ export async function getShoppingList(planId: number) {
     plan.weekStartDate.toISOString().slice(0, 10) < thisWeekSunday(new Date());
 
   let staples: string[] = [];
+  // Live per-ingredient "partial" flags (an on-hand or needed term was skipped
+  // by an impossible unit conversion). Not persisted — merged into the
+  // response so the UI can say "units differ" instead of silently over-asking.
+  const partialByIngredient = new Map<number, boolean>();
   if (!isPastWeek) {
     const computed = await computeShoppingItems(planId);
     staples = computed.staples;
+    for (const it of computed.items) partialByIngredient.set(it.ingredientId, it.partial);
     await reconcileShoppingItems(planId, computed.items);
   }
   const rows = await prisma.shoppingItem.findMany({
@@ -339,7 +344,10 @@ export async function getShoppingList(planId: number) {
     include: { ingredient: true },
     orderBy: { ingredient: { category: "asc" } },
   });
-  return { items: rows, staples };
+  return {
+    items: rows.map((r) => ({ ...r, partial: partialByIngredient.get(r.ingredientId) ?? false })),
+    staples,
+  };
 }
 
 // The list is now always live on read, so "generate" is just a recompute.
