@@ -79,25 +79,42 @@ export default function ShoppingList() {
     [plans, viewedWeek],
   );
 
+  // Which plan the current `items` / `customItems` state belongs to. Rendering
+  // is gated on these matching the viewed plan, so switching weeks can never
+  // show the old week's list under the new week's header, and a slow response
+  // for a week the user already left is dropped instead of clobbering the view.
+  const [loadedPlanId, setLoadedPlanId] = useState<number | null>(null);
+  const [customLoadedPlanId, setCustomLoadedPlanId] = useState<number | null>(null);
+
   // Refetch items when viewedPlan.id changes (or when it goes from null to
   // non-null on initial plans load).
   useEffect(() => {
     if (!viewedPlan) {
       setItems([]);
       setStaples([]);
+      setLoadedPlanId(null);
       return;
     }
-    getShoppingList(viewedPlan.id)
-      .then((r) => { setItems(r.items); setStaples(r.staples); })
-      .catch(() => { setItems([]); setStaples([]); });
+    const planId = viewedPlan.id;
+    let stale = false;
+    getShoppingList(planId)
+      .then((r) => { if (stale) return; setItems(r.items); setStaples(r.staples); setLoadedPlanId(planId); })
+      .catch(() => { if (stale) return; setItems([]); setStaples([]); setLoadedPlanId(planId); });
+    return () => { stale = true; };
   }, [viewedPlan?.id]);
 
   useEffect(() => {
     if (!viewedPlan) {
       setCustomItems([]);
+      setCustomLoadedPlanId(null);
       return;
     }
-    getCustomShoppingItems(viewedPlan.id).then(setCustomItems).catch(() => setCustomItems([]));
+    const planId = viewedPlan.id;
+    let stale = false;
+    getCustomShoppingItems(planId)
+      .then((r) => { if (stale) return; setCustomItems(r); setCustomLoadedPlanId(planId); })
+      .catch(() => { if (stale) return; setCustomItems([]); setCustomLoadedPlanId(planId); });
+    return () => { stale = true; };
   }, [viewedPlan?.id]);
 
   const todayWeek = useMemo(() => parseWeekParam(null), []);
@@ -116,6 +133,7 @@ export default function ShoppingList() {
       const r = await generateShoppingList(viewedPlan.id);
       setItems(r.items);
       setStaples(r.staples);
+      setLoadedPlanId(viewedPlan.id);
     } finally { setGenerating(false); }
   };
 
@@ -171,20 +189,31 @@ export default function ShoppingList() {
     }
   };
 
+  // Only render list state that belongs to the viewed plan — while a week's
+  // fetch is in flight, its sections show as loading rather than the previous
+  // week's data.
+  const listLoaded = viewedPlan != null && loadedPlanId === viewedPlan.id;
+  const visibleItems = useMemo(() => (listLoaded ? items : []), [listLoaded, items]);
+  const visibleStaples = listLoaded ? staples : [];
+  const visibleCustomItems = useMemo(
+    () => (viewedPlan != null && customLoadedPlanId === viewedPlan.id ? customItems : []),
+    [viewedPlan?.id, customLoadedPlanId, customItems],
+  );
+
   // Estimate rows (need === 0) are unconvertible-unit items — show them under
   // "To buy" with a "qty?" hint rather than as "Have 0".
   const toBuy = useMemo(
-    () => items.filter((i) => !i.checked && (i.quantityToBuy > 0 || i.quantityNeeded === 0)),
-    [items],
+    () => visibleItems.filter((i) => !i.checked && (i.quantityToBuy > 0 || i.quantityNeeded === 0)),
+    [visibleItems],
   );
   const alreadyHave = useMemo(
-    () => items.filter((i) => !i.checked && i.quantityToBuy === 0 && i.quantityNeeded > 0),
-    [items],
+    () => visibleItems.filter((i) => !i.checked && i.quantityToBuy === 0 && i.quantityNeeded > 0),
+    [visibleItems],
   );
-  const done = useMemo(() => items.filter((i) => i.checked), [items]);
+  const done = useMemo(() => visibleItems.filter((i) => i.checked), [visibleItems]);
 
-  const customToBuy = useMemo(() => customItems.filter((i) => !i.checked), [customItems]);
-  const customDone = useMemo(() => customItems.filter((i) =>  i.checked), [customItems]);
+  const customToBuy = useMemo(() => visibleCustomItems.filter((i) => !i.checked), [visibleCustomItems]);
+  const customDone = useMemo(() => visibleCustomItems.filter((i) =>  i.checked), [visibleCustomItems]);
 
   const monthLabel = localMidnightFromISO(viewedWeek)
     .toLocaleDateString(undefined, { month: "long", day: "numeric" });
@@ -234,12 +263,16 @@ export default function ShoppingList() {
           monthLabel={monthLabel}
           onGoToPlanner={() => navigate(`/planner?week=${viewedWeek}`)}
         />
-      ) : items.length === 0 ? (
+      ) : !listLoaded ? (
+        <div className="bg-surface-1 border border-line rounded-[14px] px-4 sm:px-5 py-5 text-[13px] text-ink-3">
+          Loading week…
+        </div>
+      ) : visibleItems.length === 0 ? (
         <NoListCard
           isPastWeek={isPastWeek}
           generating={generating}
           onGenerate={handleGenerate}
-          compact={customItems.length > 0 || !isPastWeek}
+          compact={visibleCustomItems.length > 0 || !isPastWeek}
         />
       ) : null}
 
@@ -280,7 +313,7 @@ export default function ShoppingList() {
         </div>
       )}
 
-      {(toBuy.length > 0 || customToBuy.length > 0 || !isPastWeek) && viewedPlan && (
+      {listLoaded && (toBuy.length > 0 || customToBuy.length > 0 || !isPastWeek) && (
         <Section title="To buy" count={toBuy.length + customToBuy.length}>
           {byCategory(toBuy).map(([cat, list]) => (
             <div key={cat}>
@@ -342,14 +375,14 @@ export default function ShoppingList() {
         </Section>
       )}
 
-      {staples.length > 0 && (
+      {visibleStaples.length > 0 && (
         <details className="bg-surface-1 border border-line rounded-[14px] overflow-hidden">
           <summary className="cursor-pointer list-none px-4 sm:px-5 py-3 text-[11px] text-ink-3 uppercase tracking-[0.08em] flex justify-between">
             <span>Season to taste</span>
-            <span>{staples.length} item{staples.length === 1 ? "" : "s"}</span>
+            <span>{visibleStaples.length} item{visibleStaples.length === 1 ? "" : "s"}</span>
           </summary>
           <div className="px-4 sm:px-5 pb-3 text-[13px] text-ink-2">
-            {staples.join(", ")}
+            {visibleStaples.join(", ")}
           </div>
         </details>
       )}
