@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { X, Check } from "lucide-react";
 import type { PlannedMeal, DeductOverride } from "../../api/plans";
 import type { PantryCard } from "../../api/pantry";
 import type { Ingredient } from "../../api/ingredients";
@@ -69,7 +69,12 @@ export default function CookConfirmModal({ pm, pantryByIngredient, pantryCards, 
     })),
   );
   const [busy, setBusy] = useState(false);
-  const [step, setStep] = useState<"use" | "confirm">("use");
+  // "loading": the automatic pantry check on open. "summary": the one-tap
+  // happy path — clean deductions collapsed, only flagged rows shown.
+  // "review": every deduction row, editable. "use": legacy recipe-amount
+  // editor (scaling fixes, ad-hoc additions, and the fallback when the
+  // preview call fails).
+  const [step, setStep] = useState<"loading" | "summary" | "review" | "use">("loading");
   const [confirmRows, setConfirmRows] = useState<ConfirmRowState[]>([]);
 
   useEffect(() => {
@@ -110,13 +115,11 @@ export default function CookConfirmModal({ pm, pantryByIngredient, pantryCards, 
     ]);
   };
 
-  const goToConfirm = async () => {
-    if (busy) return;
-    setBusy(true);
+  const runPreview = async (sourceRows: CookConfirmRowState[]): Promise<boolean> => {
+    const lines: CookPreviewInputLine[] = sourceRows
+      .filter((r) => r.checked && r.quantity > 0)
+      .map((r) => ({ ingredientId: r.ingredientId, name: r.ingredientName, quantity: r.quantity, unit: r.unit }));
     try {
-      const lines: CookPreviewInputLine[] = rows
-        .filter((r) => r.checked && r.quantity > 0)
-        .map((r) => ({ ingredientId: r.ingredientId, name: r.ingredientName, quantity: r.quantity, unit: r.unit }));
       const preview = await onPreview(lines);
       setConfirmRows(
         preview.map((p, i) => ({
@@ -133,7 +136,29 @@ export default function CookConfirmModal({ pm, pantryByIngredient, pantryCards, 
           included: p.included,
         })),
       );
-      setStep("confirm");
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  // The pantry check runs automatically on open: the common case — cooked the
+  // planned meal, mappings clean — should be one tap, not a two-step audit.
+  useEffect(() => {
+    let cancelled = false;
+    runPreview(rows).then((ok) => {
+      if (!cancelled) setStep(ok ? "summary" : "use");
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const goToConfirm = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const ok = await runPreview(rows);
+      if (ok) setStep("summary");
     } finally {
       setBusy(false);
     }
@@ -162,6 +187,11 @@ export default function CookConfirmModal({ pm, pantryByIngredient, pantryCards, 
     const row = confirmRows.find((r) => r.key === key);
     if (row) onRepointPersist?.(row.name, ing.id);
   };
+
+  // Clean rows auto-apply silently; anything the preview flagged (shaky match,
+  // guessed conversion, no match) is the only thing the user is asked about.
+  const cleanRows = confirmRows.filter((r) => r.confidence === "exact" || r.confidence === "converted");
+  const flaggedRows = confirmRows.filter((r) => r.confidence === "estimated" || r.confidence === "none");
 
   const confirmSubmit = async () => {
     if (busy) return;
@@ -204,7 +234,9 @@ export default function CookConfirmModal({ pm, pantryByIngredient, pantryCards, 
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-2">
-          {step === "use" ? (
+          {step === "loading" ? (
+            <div className="py-10 text-center text-[13px] text-ink-3">Checking pantry…</div>
+          ) : step === "use" ? (
             <>
               {rows.map((r) => (
                 <CookConfirmRow
@@ -218,6 +250,32 @@ export default function CookConfirmModal({ pm, pantryByIngredient, pantryCards, 
               ))}
               <AddIngredientRow excludeIds={excludeIds} onPick={addAdhoc} />
             </>
+          ) : step === "summary" ? (
+            <>
+              {cleanRows.length > 0 && (
+                <div className="mt-2 mb-1 bg-accent-soft border border-accent-line rounded-[12px] px-4 py-3">
+                  <div className="text-[12.5px] font-semibold text-accent-ink flex items-center gap-1.5">
+                    <Check size={13} strokeWidth={3} /> Deduct as planned · {cleanRows.length}
+                  </div>
+                  <div className="text-[12px] text-ink-3 mt-1">
+                    {cleanRows.map((r) => r.name).join(", ")}
+                  </div>
+                </div>
+              )}
+              {flaggedRows.length > 0 && (
+                <>
+                  <div className="px-1 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3">
+                    Needs attention · {flaggedRows.length}
+                  </div>
+                  <ConfirmStep
+                    rows={flaggedRows}
+                    cards={pantryCards}
+                    onChangeRow={changeConfirmRow}
+                    onRepoint={repoint}
+                  />
+                </>
+              )}
+            </>
           ) : (
             <ConfirmStep
               rows={confirmRows}
@@ -229,18 +287,29 @@ export default function CookConfirmModal({ pm, pantryByIngredient, pantryCards, 
         </div>
 
         <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-line-soft">
-          {step === "use" ? (
+          {step === "loading" ? (
+            <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+          ) : step === "use" ? (
             <>
               <Button variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button>
               <Button variant="primary" onClick={goToConfirm} disabled={busy}>
                 {busy ? "Checking…" : "Next"}
               </Button>
             </>
+          ) : step === "summary" ? (
+            <>
+              <Button variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button>
+              <Button variant="ghost" onClick={() => setStep("review")} disabled={busy}>Review all</Button>
+              <Button variant="primary" onClick={confirmSubmit} disabled={busy}>
+                {busy ? "Saving…" : "Cook it"}
+              </Button>
+            </>
           ) : (
             <>
-              <Button variant="ghost" onClick={() => setStep("use")} disabled={busy}>Back</Button>
+              <Button variant="ghost" onClick={() => setStep("summary")} disabled={busy}>Back</Button>
+              <Button variant="ghost" onClick={() => setStep("use")} disabled={busy}>Edit amounts</Button>
               <Button variant="primary" onClick={confirmSubmit} disabled={busy}>
-                {busy ? "Saving…" : "Confirm"}
+                {busy ? "Saving…" : "Cook it"}
               </Button>
             </>
           )}
