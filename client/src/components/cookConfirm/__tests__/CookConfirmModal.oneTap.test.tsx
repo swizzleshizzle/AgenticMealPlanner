@@ -113,6 +113,45 @@ describe("CookConfirmModal one-tap happy path", () => {
     expect(screen.getByText("brioche bun")).toBeTruthy();
   });
 
+  it("buckets season-to-taste ingredients into a note instead of asking about them", async () => {
+    const pmWithStaples = {
+      ...pm,
+      meal: {
+        ...pm.meal,
+        ingredients: [
+          ...pm.meal.ingredients,
+          { id: 4, quantity: 1, unit: "to taste", ingredient: { id: 104, name: "black pepper", defaultUnit: "tsp" } },
+          { id: 5, quantity: 1, unit: "as needed", ingredient: { id: 105, name: "cooking oil", defaultUnit: "tbsp" } },
+        ],
+      },
+    };
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const onPreview = vi.fn().mockResolvedValue(cleanPreview);
+    render(
+      <CookConfirmModal
+        pm={pmWithStaples}
+        pantryByIngredient={new Map()}
+        pantryCards={[]}
+        onCancel={() => {}}
+        onPreview={onPreview}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    await screen.findByRole("button", { name: /cook it/i });
+    // Staples never go to the pantry check…
+    const previewedIds = onPreview.mock.calls[0][0].map((l: any) => l.ingredientId);
+    expect(previewedIds).toEqual([101, 102, 103]);
+    // …and render as a passive note, not a question.
+    expect(screen.getByText(/season to taste/i)).toBeTruthy();
+    expect(screen.getByText(/black pepper, cooking oil/)).toBeTruthy();
+    expect(screen.queryByText(/needs attention/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /cook it/i }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0][0].map((o: any) => o.ingredientId)).toEqual([101, 102, 103]);
+  });
+
   it("falls back to the editable amounts step when the preview fails", async () => {
     renderModal({ onPreview: vi.fn().mockRejectedValue(new Error("network")) });
     // Legacy path: recipe amounts editable, explicit Next to retry the preview.

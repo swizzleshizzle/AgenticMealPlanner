@@ -7,6 +7,7 @@ import CookConfirmRow, { type CookConfirmRowState, type PantryHint } from "./Coo
 import AddIngredientRow from "./AddIngredientRow";
 import Button from "../ui/Button";
 import { formatQuantity, roundQuantity } from "../../lib/formatQuantity";
+import { isDescriptorUnit } from "../../lib/descriptorUnits";
 import ConfirmStep from "./ConfirmStep";
 import type { ConfirmRowState } from "./ConfirmRow";
 import type { CookPreviewInputLine, CookPreviewLine } from "../../api/plans";
@@ -56,8 +57,15 @@ interface Props {
 export default function CookConfirmModal({ pm, pantryByIngredient, pantryCards, onCancel, onPreview, onSubmit, onRepointPersist }: Props) {
   const multiplier = pm.servings / pm.meal.servings;
 
+  // Season-to-taste amounts ("to taste", "as needed", …) never deduct — they
+  // become a passive note instead of a "pick pantry item…" question per cook.
+  const stapleNames = useMemo(
+    () => pm.meal.ingredients.filter((mi) => isDescriptorUnit(mi.unit)).map((mi) => mi.ingredient.name),
+    [pm],
+  );
+
   const [rows, setRows] = useState<CookConfirmRowState[]>(() =>
-    pm.meal.ingredients.map((mi) => ({
+    pm.meal.ingredients.filter((mi) => !isDescriptorUnit(mi.unit)).map((mi) => ({
       key: `mi-${mi.id}`,
       ingredientId: mi.ingredient.id,
       ingredientName: mi.ingredient.name,
@@ -274,6 +282,13 @@ export default function CookConfirmModal({ pm, pantryByIngredient, pantryCards, 
                     onRepoint={repoint}
                   />
                 </>
+              )}
+              {stapleNames.length > 0 && (
+                <div className="mt-3 px-1 text-[12px] text-ink-3">
+                  <span className="font-semibold uppercase tracking-[0.06em] text-[11px]">Season to taste</span>
+                  <span className="ml-2">{stapleNames.join(", ")}</span>
+                  <span className="ml-1">— not tracked</span>
+                </div>
               )}
             </>
           ) : (
