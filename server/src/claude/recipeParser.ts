@@ -24,7 +24,7 @@ interface ParsedRecipe {
   }[];
 }
 
-export async function parseRecipeFromFile(filePath: string): Promise<ParsedRecipe> {
+export async function parseRecipeFromFile(filePath: string, existingTags: string[] = []): Promise<ParsedRecipe> {
   const absolutePath = path.resolve(filePath);
   const ext = path.extname(filePath).toLowerCase();
   const fileType = ext === ".pdf" ? "PDF"
@@ -60,7 +60,8 @@ Extract all recipe information and return ONLY valid JSON matching this exact sc
   ]
 }
 
-For tags, include protein type, cuisine, and any relevant descriptors (quick, vegetarian, etc).`;
+For tags, include protein type, cuisine, and any relevant descriptors (quick, vegetarian, etc).${existingTags.length > 0 ? `
+Prefer reusing tags from this existing vocabulary over inventing near-duplicates (e.g. use "asian" if it exists rather than "asian-inspired"): ${existingTags.slice(0, 120).join(", ")}` : ""}`;
 
   const raw = await callClaudeViaSdk({
     userPrompt: prompt,

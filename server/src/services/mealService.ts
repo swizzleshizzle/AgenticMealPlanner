@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma.js";
+import { normalizeTags } from "../lib/tags.js";
 import { copyFile, unlink, stat } from "fs/promises";
 import path from "path";
 import { ensureMealDir, mealThumbPath, mealPdfPath, relStoragePath } from "./mediaStorage.js";
@@ -93,6 +94,7 @@ export function resolveCapabilityWrite(
 
 export async function createMeal(data: CreateMealInput) {
   const { ingredients, instructions, canBatch, canFresh, ...rest } = data;
+  if (rest.tags) rest.tags = normalizeTags(rest.tags);
   const capability = resolveCapabilityWrite({ canBatch, canFresh }, null)!;
 
   return prisma.$transaction(async (tx) => {
@@ -294,7 +296,7 @@ export async function supersedeMeal(sourceId: number, data: Partial<CreateMealIn
         servings:     data.servings     ?? source.servings,
         prepTime:     data.prepTime     ?? source.prepTime,
         cookTime:     data.cookTime     ?? source.cookTime,
-        tags:         data.tags         ?? source.tags,
+        tags:         normalizeTags(data.tags ?? source.tags),
         instructions: JSON.stringify(instructions ?? sourceInstructions),
         calories:     data.calories     ?? source.calories,
         proteinG:     data.proteinG     ?? source.proteinG,
@@ -367,7 +369,7 @@ export async function createVariant(sourceId: number, data: Partial<CreateMealIn
       servings:     data.servings     ?? source.servings,
       prepTime:     data.prepTime     ?? source.prepTime,
       cookTime:     data.cookTime     ?? source.cookTime,
-      tags:         data.tags         ?? source.tags,
+      tags:         normalizeTags(data.tags ?? source.tags),
       instructions: JSON.stringify(instructions ?? sourceInstructions),
       calories:     data.calories     ?? source.calories,
       proteinG:     data.proteinG     ?? source.proteinG,
