@@ -92,7 +92,11 @@ router.post("/import", upload.single("file"), async (req, res) => {
   }
 
   try {
-    const parsed = await parseRecipeFromFile(req.file.path);
+    // Feed the current tag vocabulary into the parse so imports reuse
+    // existing tags instead of inventing near-duplicates (tag sprawl).
+    const tagRows = await prisma.meal.findMany({ where: { archivedAt: null }, select: { tags: true } });
+    const tagVocabulary = [...new Set(tagRows.flatMap((m) => m.tags))].sort();
+    const parsed = await parseRecipeFromFile(req.file.path, tagVocabulary);
 
     const existing = await prisma.ingredient.findMany({ select: { id: true, name: true } });
     const aliasRows = await prisma.ingredientAlias.findMany({ select: { alias: true, ingredientId: true } });
