@@ -1,6 +1,6 @@
 import { aggregateCards } from "./pantryAggregation.js";
 import { resolvePlannedMealForShopping, type VersionRow } from "./mealVersioning.js";
-import { convert, UnitConversionError, isDescriptorUnit } from "../lib/units.js";
+import { convert, UnitConversionError, isDescriptorUnit, unitsPerContainerFor } from "../lib/units.js";
 import { prisma } from "../lib/prisma.js";
 import { thisWeekSunday } from "../lib/week.js";
 
@@ -9,6 +9,7 @@ export interface IngredientMeta {
   defaultUnit: string;
   densityGPerMl?: number | null;
   gramsPerCount?: number | null;
+  purchaseUnitQty?: number | null;
 }
 
 export interface AggregateInput {
@@ -76,7 +77,11 @@ export function aggregateShoppingItems(input: AggregateInput): AggregateResult {
   const canon = (id: number) => input.canonicalIds?.get(id) ?? id;
   const hintFor = (id: number) => {
     const m = metaById.get(id);
-    return { densityGPerMl: m?.densityGPerMl ?? null, gramsPerCount: m?.gramsPerCount ?? null };
+    return {
+      densityGPerMl: m?.densityGPerMl ?? null,
+      gramsPerCount: m?.gramsPerCount ?? null,
+      unitsPerContainer: m ? unitsPerContainerFor(m) : null,
+    };
   };
 
   const needed = new Map<number, number>();
@@ -251,7 +256,7 @@ async function computeShoppingItems(
   const metaIngredientIds = [...new Set([...involvedIngredientIds, ...canonicalIds.values()])];
   const ingredientMeta = await prisma.ingredient.findMany({
     where: { id: { in: metaIngredientIds } },
-    select: { id: true, defaultUnit: true, densityGPerMl: true, gramsPerCount: true },
+    select: { id: true, defaultUnit: true, densityGPerMl: true, gramsPerCount: true, purchaseUnitQty: true },
   });
 
   const { items, staples: stapleIds } = aggregateShoppingItems({

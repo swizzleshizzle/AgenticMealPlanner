@@ -145,6 +145,7 @@ router.post("/:planId/meals/:mealId/cook-preview", async (req, res) => {
     defaultUnit: c.ingredient.defaultUnit,
     densityGPerMl: c.ingredient.densityGPerMl,
     gramsPerCount: c.ingredient.gramsPerCount,
+    purchaseUnitQty: c.ingredient.purchaseUnitQty,
     batches: c.batches.map((b) => ({
       id: b.id,
       quantity: b.quantity,

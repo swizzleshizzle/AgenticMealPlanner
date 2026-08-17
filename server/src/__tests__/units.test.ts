@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { convert, UnitConversionError, isDescriptorUnit, type DensityHint } from "../lib/units.js";
+import { convert, UnitConversionError, isDescriptorUnit, unitsPerContainerFor, type DensityHint } from "../lib/units.js";
 
 describe("convert", () => {
   it("same-unit returns the same value", () => {
@@ -102,6 +102,24 @@ describe("discrete count units", () => {
   it("each-like units still bridge to mass via gramsPerCount", () => {
     expect(convert(2, "count", "oz", { gramsPerCount: 28.3495 })).toBeCloseTo(2, 5);
   });
+
+  // With a known package size (unitsPerContainer, sourced from the
+  // ingredient's purchaseUnitQty when its default unit is count-type), the
+  // container ↔ each-like refusal lifts and the math is real.
+  it("converts container to count when the package size is known", () => {
+    expect(convert(0.25, "package", "count", { unitsPerContainer: 8 })).toBeCloseTo(2, 5);
+    expect(convert(2, "count", "package", { unitsPerContainer: 8 })).toBeCloseTo(0.25, 5);
+  });
+
+  it("bridges container to mass through the package size and gramsPerCount", () => {
+    // 1 package = 8 buns, 1 bun ≈ 1 oz → 1 package ≈ 8 oz.
+    expect(convert(1, "package", "oz", { unitsPerContainer: 8, gramsPerCount: 28.3495 })).toBeCloseTo(8, 4);
+  });
+
+  it("still refuses container conversion when the package size is unknown", () => {
+    expect(() => convert(0.25, "package", "count", {})).toThrow(UnitConversionError);
+    expect(() => convert(1, "package", "oz", { gramsPerCount: 28.3495 })).toThrow(UnitConversionError);
+  });
 });
 
 describe("isDescriptorUnit", () => {
@@ -118,4 +136,23 @@ describe("isDescriptorUnit", () => {
       expect(isDescriptorUnit(u)).toBe(false);
     },
   );
+});
+
+describe("unitsPerContainerFor", () => {
+  it("uses purchaseUnitQty when the default unit is an each-like count", () => {
+    expect(unitsPerContainerFor({ defaultUnit: "count", purchaseUnitQty: 8 })).toBe(8);
+    expect(unitsPerContainerFor({ defaultUnit: "whole", purchaseUnitQty: 6 })).toBe(6);
+  });
+
+  it("returns null for mass/volume default units (qty means something else there)", () => {
+    expect(unitsPerContainerFor({ defaultUnit: "oz", purchaseUnitQty: 16 })).toBeNull();
+    expect(unitsPerContainerFor({ defaultUnit: "cup", purchaseUnitQty: 2 })).toBeNull();
+  });
+
+  it("returns null for container default units, unset or non-positive qty, unknown units", () => {
+    expect(unitsPerContainerFor({ defaultUnit: "package", purchaseUnitQty: 8 })).toBeNull();
+    expect(unitsPerContainerFor({ defaultUnit: "count", purchaseUnitQty: null })).toBeNull();
+    expect(unitsPerContainerFor({ defaultUnit: "count", purchaseUnitQty: 0 })).toBeNull();
+    expect(unitsPerContainerFor({ defaultUnit: "gibberish", purchaseUnitQty: 8 })).toBeNull();
+  });
 });

@@ -1,5 +1,6 @@
 import { Prisma, type PantryLocation } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
+import { convert, UnitConversionError, unitsPerContainerFor } from "../lib/units.js";
 
 export interface CreateBatchInput {
   ingredientId?: number;
@@ -152,4 +153,54 @@ export async function restoreBatch(id: number) {
 export async function hardDeleteBatch(id: number) {
   const deleted = await prisma.pantryBatch.delete({ where: { id } });
   return { id: deleted.id };
+}
+
+export interface NormalizeResult {
+  normalized: Array<{ batchId: number; fromUnit: string; toQuantity: number; toUnit: string }>;
+  skipped: Array<{ batchId: number; unit: string; reason: string }>;
+}
+
+// Convert every active batch of an ingredient to its default unit, using the
+// same conversion hints the rest of the app uses. Unconvertible batches are
+// left untouched and reported — never guessed. Fixes the mixed-unit batch
+// sets (mayo in oz AND fl oz) that every downstream conversion headache
+// feeds on.
+export async function normalizeBatches(ingredientId: number): Promise<NormalizeResult> {
+  const ingredient = await prisma.ingredient.findUnique({ where: { id: ingredientId } });
+  if (!ingredient) throw new Error(`Unknown ingredientId: ${ingredientId}`);
+
+  const target = ingredient.defaultUnit;
+  const hint = {
+    densityGPerMl: ingredient.densityGPerMl,
+    gramsPerCount: ingredient.gramsPerCount,
+    unitsPerContainer: unitsPerContainerFor(ingredient),
+  };
+  const batches = await prisma.pantryBatch.findMany({
+    where: { ingredientId, consumedAt: null },
+  });
+
+  const result: NormalizeResult = { normalized: [], skipped: [] };
+  const updates: Array<{ id: number; quantity: number }> = [];
+  for (const b of batches) {
+    if (b.unit === target) continue;
+    try {
+      // Round at write time so normalization never introduces float dust.
+      const quantity = Math.round(convert(b.quantity, b.unit, target, hint) * 1e4) / 1e4;
+      updates.push({ id: b.id, quantity });
+      result.normalized.push({ batchId: b.id, fromUnit: b.unit, toQuantity: quantity, toUnit: target });
+    } catch (e) {
+      if (e instanceof UnitConversionError) {
+        result.skipped.push({ batchId: b.id, unit: b.unit, reason: e.missing });
+      } else {
+        throw e;
+      }
+    }
+  }
+
+  await prisma.$transaction(
+    updates.map((u) =>
+      prisma.pantryBatch.update({ where: { id: u.id }, data: { quantity: u.quantity, unit: target } }),
+    ),
+  );
+  return result;
 }

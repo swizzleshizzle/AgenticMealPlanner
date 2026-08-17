@@ -9,6 +9,7 @@ function card(over: Partial<PantryCardLite> & { ingredientId: number; name: stri
     defaultUnit: over.defaultUnit ?? "g",
     densityGPerMl: over.densityGPerMl ?? null,
     gramsPerCount: over.gramsPerCount ?? null,
+    purchaseUnitQty: over.purchaseUnitQty ?? null,
     batches: over.batches ?? [{ id: 1, quantity: 500, unit: "g", expirationDate: null, tags: [] }],
     totalsByUnit: over.totalsByUnit ?? [{ unit: "g", qty: 500 }],
   };
@@ -180,6 +181,20 @@ describe("buildCookPreview", () => {
     expect(p.confidence).toBe("estimated");
     expect(p.included).toBe(false);
     expect(p.deductUnit).toBe("package");
+  });
+
+  it("converts a count need against a package-only card when the package size is known", () => {
+    const cards = [card({
+      ingredientId: 62, name: "tortilla", category: "grain", defaultUnit: "count", purchaseUnitQty: 10,
+      batches: [{ id: 14, quantity: 2, unit: "package", expirationDate: null, tags: [] }],
+      totalsByUnit: [{ unit: "package", qty: 2 }],
+    })];
+    const [p] = buildCookPreview([line({ ingredientId: 62, name: "tortilla", quantity: 5, unit: "count" })], cards);
+    expect(p.deductUnit).toBe("package");
+    expect(p.deductQuantity).toBeCloseTo(0.5, 5); // 5 tortillas = half a 10-pack
+    expect(p.confidence).toBe("exact");
+    expect(p.included).toBe(true);
+    expect(p.projectedRemaining).toEqual({ qty: 1.5, unit: "package" });
   });
 
   it("alias map resolves a line to its canonical pantry ingredient as exact", () => {

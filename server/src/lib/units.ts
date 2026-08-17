@@ -3,6 +3,12 @@ export type UnitType = "mass" | "volume" | "count";
 export interface DensityHint {
   densityGPerMl?: number | null;
   gramsPerCount?: number | null;
+  /**
+   * How many each-like counts one container holds (e.g. 8 buns per package).
+   * Sourced from the ingredient's purchaseUnitQty when its defaultUnit is
+   * count-type. Lifts the container ↔ each-like refusal.
+   */
+  unitsPerContainer?: number | null;
 }
 
 export class UnitConversionError extends Error {
@@ -157,18 +163,27 @@ export function convert(
   // Convert to canonical base of `from.type`.
   const canonicalFrom = value * from.canonicalPerUnit;
 
-  if (from.type === to.type) {
-    if (fromContainer !== toContainer) {
-      // container ↔ each-like: the ratio is a per-ingredient package size we
-      // don't know, not 1:1.
-      throw new UnitConversionError(fromUnit, toUnit, "containerSize");
-    }
+  // Container ↔ container is 1:1 (both mean "one retail container").
+  if (fromContainer && toContainer) {
     return canonicalFrom / to.canonicalPerUnit;
   }
+  // A container is not an item; crossing the container boundary (to each-like
+  // counts, or to mass/volume) needs the per-ingredient package size.
+  if (fromContainer) {
+    if (hint.unitsPerContainer == null) {
+      throw new UnitConversionError(fromUnit, toUnit, "containerSize");
+    }
+    return convert(value * hint.unitsPerContainer, "count", toUnit, hint);
+  }
+  if (toContainer) {
+    if (hint.unitsPerContainer == null) {
+      throw new UnitConversionError(fromUnit, toUnit, "containerSize");
+    }
+    return convert(value, fromUnit, "count", hint) / hint.unitsPerContainer;
+  }
 
-  // Container units never bridge cross-type: gramsPerCount is per item.
-  if (fromContainer || toContainer) {
-    throw new UnitConversionError(fromUnit, toUnit, "containerSize");
+  if (from.type === to.type) {
+    return canonicalFrom / to.canonicalPerUnit;
   }
 
   // Cross-type. Need to bridge through grams using density / gramsPerCount.
@@ -207,4 +222,21 @@ export function convert(
 
 export function unitTypeOf(u: string): UnitType {
   return classify(u).type;
+}
+
+/**
+ * Derive the container-size hint from an ingredient: when its default unit is
+ * an each-like count, purchaseUnitQty ("one retail unit holds N defaultUnit")
+ * IS the package size. For mass/volume defaults the field means something
+ * else (oz per pack), and for container defaults it would be circular.
+ */
+export function unitsPerContainerFor(ing: {
+  defaultUnit: string;
+  purchaseUnitQty?: number | null;
+}): number | null {
+  const qty = ing.purchaseUnitQty;
+  if (qty == null || qty <= 0) return null;
+  const n = normalize(ing.defaultUnit);
+  if (!(n in COUNT) || isContainerUnit(n)) return null;
+  return qty;
 }

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { X, Settings } from "lucide-react";
 import type { PantryCard } from "../../api/pantry";
 import { formatQuantity } from "../../lib/formatQuantity";
-import { deleteBatch, restoreBatch } from "../../api/pantry";
+import { deleteBatch, restoreBatch, normalizeBatches } from "../../api/pantry";
 import { useToast } from "../ui/ToastProvider";
 import Button from "../ui/Button";
 import BatchRow from "./BatchRow";
@@ -125,6 +125,23 @@ export default function PantryDrawer({ card, onClose, onChanged }: Props) {
                 ),
               )}
             </div>
+            {card.batches.some((b) => b.unit !== card.ingredient.defaultUnit) && (
+              <div className="mt-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={async () => {
+                    const r = await normalizeBatches(card.ingredient.id);
+                    onChanged();
+                    const parts = [`${r.normalized.length} batch${r.normalized.length === 1 ? "" : "es"} converted to ${card.ingredient.defaultUnit}`];
+                    if (r.skipped.length > 0) parts.push(`${r.skipped.length} left as-is (units can't convert)`);
+                    showToast({ message: parts.join(" · ") });
+                  }}
+                >
+                  Normalize batches to {card.ingredient.defaultUnit}
+                </Button>
+              </div>
+            )}
             <div className="mt-3">
               {addingBatch ? (
                 <BatchAddForm

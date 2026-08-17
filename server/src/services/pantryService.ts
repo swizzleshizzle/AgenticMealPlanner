@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { aggregateCards, type PantryCard } from "./pantryAggregation.js";
-import { convert, UnitConversionError } from "../lib/units.js";
+import { convert, UnitConversionError, unitsPerContainerFor } from "../lib/units.js";
 import { prisma } from "../lib/prisma.js";
 
 export interface PantryQuery {
@@ -87,10 +87,14 @@ export interface DrainPlan {
 export function selectBatchesToDrain(input: {
   needed: number;
   neededUnit: string;
-  ingredient: { defaultUnit: string; densityGPerMl: number | null; gramsPerCount: number | null };
+  ingredient: { defaultUnit: string; densityGPerMl: number | null; gramsPerCount: number | null; purchaseUnitQty?: number | null };
   batches: Array<{ id: number; quantity: number; unit: string; expirationDate: Date | null; tags: string[] }>;
 }): DrainPlan {
-  const hint = { densityGPerMl: input.ingredient.densityGPerMl, gramsPerCount: input.ingredient.gramsPerCount };
+  const hint = {
+    densityGPerMl: input.ingredient.densityGPerMl,
+    gramsPerCount: input.ingredient.gramsPerCount,
+    unitsPerContainer: unitsPerContainerFor(input.ingredient),
+  };
   // Sort: use_first first, then FEFO ASC, then null-exp last.
   const ordered = input.batches.slice().sort((a, b) => {
     const aFirst = a.tags.includes("use_first") ? 0 : 1;

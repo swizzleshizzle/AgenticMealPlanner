@@ -115,6 +115,25 @@ describe("selectBatchesToDrain", () => {
     expect(plan.shortfall).toBe(2);
   });
 
+  it("drains across package and count batches when the package size is known", () => {
+    // With purchaseUnitQty = 8 (a package holds 8 buns), the 0.25-package
+    // batch is worth 2 buns: a 10-bun need drains it fully plus all 8 loose.
+    const plan = selectBatchesToDrain({
+      needed: 10,
+      neededUnit: "count",
+      ingredient: { defaultUnit: "count", densityGPerMl: null, gramsPerCount: null, purchaseUnitQty: 8 },
+      batches: [
+        batch({ id: 1, quantity: 0.25, unit: "package", expirationDate: new Date("2026-05-01Z") }),
+        batch({ id: 2, quantity: 8, unit: "count", expirationDate: null }),
+      ],
+    });
+    expect(plan.consumed).toEqual([
+      { batchId: 1, partial: false, newQuantity: 0 },
+      { batchId: 2, partial: false, newQuantity: 0 },
+    ]);
+    expect(plan.shortfall).toBe(0);
+  });
+
   it("returns shortfall when pantry can't cover", () => {
     const plan = selectBatchesToDrain({
       needed: 5,
