@@ -55,6 +55,20 @@ router.delete("/batches/:id", async (req, res) => {
   }
 });
 
+router.post("/ingredients/:id/normalize", async (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    const result = await pantryBatchService.normalizeBatches(id);
+    res.json(result);
+  } catch (e: any) {
+    if (/Unknown ingredientId/.test(e?.message ?? "")) {
+      res.status(404).json({ error: "Ingredient not found" });
+      return;
+    }
+    throw e;
+  }
+});
+
 router.post("/batches/:id/restore", async (req, res) => {
   const id = Number(req.params.id);
   const batch = await pantryBatchService.restoreBatch(id);

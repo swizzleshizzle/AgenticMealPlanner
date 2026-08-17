@@ -98,5 +98,13 @@ export const updateBatch = (id: number, input: UpdateBatchInput) =>
 export const deleteBatch = (id: number) =>
   apiFetch<PantryBatch>(`/pantry/batches/${id}`, { method: "DELETE" });
 
+export interface NormalizeResult {
+  normalized: Array<{ batchId: number; fromUnit: string; toQuantity: number; toUnit: string }>;
+  skipped: Array<{ batchId: number; unit: string; reason: string }>;
+}
+
+export const normalizeBatches = (ingredientId: number) =>
+  apiFetch<NormalizeResult>(`/pantry/ingredients/${ingredientId}/normalize`, { method: "POST" });
+
 export const restoreBatch = (id: number) =>
   apiFetch<PantryBatch>(`/pantry/batches/${id}/restore`, { method: "POST" });
