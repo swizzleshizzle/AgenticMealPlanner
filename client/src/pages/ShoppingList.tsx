@@ -166,6 +166,20 @@ export default function ShoppingList() {
     }
   };
 
+  // Low-stock suggestions land on the list as custom items — they survive the
+  // live recompute by design (a manual shopping_items row would be deleted the
+  // next time the list reconciles against the plan's needs).
+  const handleAddLowStock = async (s: LowStockSuggestion) => {
+    if (!viewedPlan || isPastWeek) return;
+    const topUp =
+      s.threshold != null && s.thresholdUnit && s.thresholdUnit === s.currentUnit && s.threshold > s.currentQty
+        ? `${formatQuantity(s.threshold - s.currentQty)} ${s.thresholdUnit}`
+        : undefined;
+    const created = await createCustomShoppingItem(viewedPlan.id, { name: s.name, qtyText: topUp });
+    setCustomItems((prev) => [...prev, created]);
+    setLowStock((prev) => prev.filter((x) => x.ingredientId !== s.ingredientId));
+  };
+
   const handleAddCustom = async () => {
     const name = draftName.trim();
     if (!name || !viewedPlan || isPastWeek) return;
@@ -295,10 +309,10 @@ export default function ShoppingList() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {/* TODO Task 27: wire add when shopping API supports adding a single item by ingredientId */}
                 <button
-                  className="px-2.5 py-1 text-[11px] font-semibold rounded-[8px] border border-line text-ink-2 hover:bg-surface-2 hover:text-ink-1"
-                  onClick={() => {/* no-op: no single-item add endpoint yet */}}
+                  className="px-2.5 py-1 text-[11px] font-semibold rounded-[8px] border border-line text-ink-2 hover:bg-surface-2 hover:text-ink-1 disabled:opacity-40 disabled:cursor-default"
+                  disabled={!viewedPlan || isPastWeek}
+                  onClick={() => handleAddLowStock(s)}
                 >
                   + Add to list
                 </button>
