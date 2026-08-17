@@ -15,6 +15,8 @@ export interface AggregateCardsInput {
     lowStockThreshold: number | null;
     lowStockUnit: string | null;
     isOneOff: boolean;
+    purchaseUnitName?: string | null;
+    purchaseUnitQty?: number | null;
   }>;
   batches: Array<{
     id: number;

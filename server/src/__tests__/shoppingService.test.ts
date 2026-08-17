@@ -190,6 +190,24 @@ describe("aggregateShoppingItems — alias canonicalization", () => {
   });
 });
 
+describe("aggregateShoppingItems — container batches with a known package size", () => {
+  it("credits a package batch against a count need via purchaseUnitQty", () => {
+    const result = aggregateShoppingItems({
+      plannedMeals: [{
+        cookStyle: "cook_fresh",
+        servings: 2,
+        meal: { servings: 2, ingredients: [{ ingredientId: 400, quantity: 6, unit: "count" }] },
+      }],
+      pantryItems: [{ ingredientId: 400, quantity: 0.5, unit: "package" }],
+      ingredients: [{ id: 400, defaultUnit: "count", purchaseUnitQty: 8 }],
+    });
+    const item = result.items[0];
+    expect(item.quantityOnHand).toBeCloseTo(4, 5); // 0.5 × 8
+    expect(item.quantityToBuy).toBeCloseTo(2, 5);
+    expect(item.partial).toBe(false); // no silent skip, no hint needed
+  });
+});
+
 describe("aggregateShoppingItems — staples & estimates", () => {
   const SALT_META: AggregateInput["ingredients"] = [{ id: 200, defaultUnit: "tsp" }];
 

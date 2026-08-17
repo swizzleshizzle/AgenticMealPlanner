@@ -1,4 +1,4 @@
-import { convert, unitTypeOf, UnitConversionError } from "../lib/units.js";
+import { convert, unitTypeOf, UnitConversionError, unitsPerContainerFor } from "../lib/units.js";
 import { fuzzyMatchIngredient } from "../claude/ingredientMatcher.js";
 
 export type CookConfidence = "exact" | "converted" | "estimated" | "none";
@@ -11,6 +11,7 @@ export interface PantryCardLite {
   defaultUnit: string;
   densityGPerMl: number | null;
   gramsPerCount: number | null;
+  purchaseUnitQty?: number | null;
   /** FEFO-sorted (soonest expiration first); batches[0].unit is the unit we deduct in. */
   batches: Array<{ id: number; quantity: number; unit: string; expirationDate: Date | null; tags: string[] }>;
   totalsByUnit: Array<{ unit: string; qty: number }>;
@@ -138,7 +139,11 @@ export function buildCookPreview(
     // Prefer the first (FEFO-ordered) batch whose unit the recipe amount can
     // actually convert to — a count need must not be estimated against a
     // "package" batch when a count batch sits right behind it.
-    const hint = { densityGPerMl: card.densityGPerMl, gramsPerCount: card.gramsPerCount };
+    const hint = {
+      densityGPerMl: card.densityGPerMl,
+      gramsPerCount: card.gramsPerCount,
+      unitsPerContainer: unitsPerContainerFor(card),
+    };
     const compatibleBatch = card.batches.find((b) => {
       try {
         convert(line.quantity, line.unit, b.unit, hint);
