@@ -27,6 +27,25 @@ export interface CallClaudeViaSdkArgs {
   model?: string;
 }
 
+export class SdkNotLoggedInError extends Error {
+  constructor() {
+    super(
+      "Claude Code is not logged in on this host — run `claude login` (interactive) as the app user, then retry.",
+    );
+    this.name = "SdkNotLoggedInError";
+  }
+}
+
+/**
+ * The SDK surfaces auth expiry as a normal-looking result string, which
+ * downstream JSON parsers then misreport as "no parseable JSON". Detect it
+ * at the boundary and fail with an actionable message instead.
+ */
+export function assertSdkResultUsable(raw: string): string {
+  if (/^not logged in\b/i.test(raw.trim())) throw new SdkNotLoggedInError();
+  return raw;
+}
+
 export function stripFences(raw: string): string {
   const trimmed = raw.trim();
   const fenced = trimmed.match(/^```(?:[a-zA-Z]+)?\n([\s\S]*?)\n```$/);
@@ -34,11 +53,11 @@ export function stripFences(raw: string): string {
   return trimmed;
 }
 
-// Resolved once at module load; undefined means let the SDK handle it.
-const CLAUDE_BIN = resolveClaudeBinary();
-
 export async function callClaudeViaSdk(args: CallClaudeViaSdkArgs): Promise<string> {
   const { userPrompt, systemPrompt, allowedTools, additionalDirectories, timeoutMs, model } = args;
+  // Resolved per call (success is cached inside the resolver): a module-load
+  // freeze is how a transient startup failure wedged every later request.
+  const CLAUDE_BIN = resolveClaudeBinary();
 
   const controller = new AbortController();
   const options: any = {
@@ -98,5 +117,5 @@ export async function callClaudeViaSdk(args: CallClaudeViaSdkArgs): Promise<stri
       })
     : await collect();
 
-  return stripFences(raw);
+  return stripFences(assertSdkResultUsable(raw));
 }
