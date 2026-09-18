@@ -63,6 +63,12 @@ export async function callClaudeViaSdk(args: CallClaudeViaSdkArgs): Promise<stri
   const options: any = {
     persistSession: false,
     mcpServers: {},
+    // Host isolation (issue #44): without these, the SDK loads the host
+    // user's own Claude Code settings — their CLAUDE.md, hooks, and personal
+    // MCP servers — into every one-shot parse, adding ~10k cache-creation
+    // tokens per call and exposing tools this process has no business seeing.
+    settingSources: [],
+    strictMcpConfig: true,
     // Pin the model so one-shot parses don't drift across SDK binary upgrades.
     model: model ?? "claude-opus-4-8",
     // Lets the timeout branch actually cancel the underlying query.
