@@ -1,0 +1,17 @@
+# ~/.config/systemd/user/mp-api.service — edit WorkingDirectory for your host
+[Unit]
+Description=AgenticMealPlanner API (tsx watch)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=%h/projects/AgenticMealPlanner/server
+EnvironmentFile=%h/projects/AgenticMealPlanner/server/.env
+ExecStart=/usr/bin/npx tsx watch src/index.ts
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

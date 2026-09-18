@@ -1,0 +1,16 @@
+# ~/.config/systemd/user/mp-web.service — edit WorkingDirectory for your host
+[Unit]
+Description=AgenticMealPlanner Vite dev server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=%h/projects/AgenticMealPlanner/client
+ExecStart=/usr/bin/npm run dev -- --host
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
