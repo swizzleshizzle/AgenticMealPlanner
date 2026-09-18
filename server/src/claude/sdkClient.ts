@@ -53,14 +53,21 @@ export function stripFences(raw: string): string {
   return trimmed;
 }
 
-export async function callClaudeViaSdk(args: CallClaudeViaSdkArgs): Promise<string> {
-  const { userPrompt, systemPrompt, allowedTools, additionalDirectories, timeoutMs, model } = args;
-  // Resolved per call (success is cached inside the resolver): a module-load
-  // freeze is how a transient startup failure wedged every later request.
-  const CLAUDE_BIN = resolveClaudeBinary();
-
-  const controller = new AbortController();
-  const options: any = {
+/**
+ * Options for one-shot parses. Host-isolated (issue #44) and root-safe:
+ * requested built-in tools are granted via an explicit allowedTools
+ * allowlist (auto-approved, no prompts) instead of
+ * allowDangerouslySkipPermissions, which Claude Code refuses when the
+ * process runs as root — observed as an opaque "process exited with code 1"
+ * on the photo-parse path.
+ */
+export function buildOneShotQueryOptions(input: {
+  systemPrompt?: string;
+  allowedTools?: string[];
+  additionalDirectories?: string[];
+  model?: string;
+}): Record<string, any> {
+  const options: Record<string, any> = {
     persistSession: false,
     mcpServers: {},
     // Host isolation (issue #44): without these, the SDK loads the host
@@ -70,23 +77,37 @@ export async function callClaudeViaSdk(args: CallClaudeViaSdkArgs): Promise<stri
     settingSources: [],
     strictMcpConfig: true,
     // Pin the model so one-shot parses don't drift across SDK binary upgrades.
-    model: model ?? "claude-opus-4-8",
-    // Lets the timeout branch actually cancel the underlying query.
-    abortController: controller,
+    model: input.model ?? "claude-opus-4-8",
   };
-  if (CLAUDE_BIN !== undefined) {
-    options.pathToClaudeCodeExecutable = CLAUDE_BIN;
-  }
-  if (systemPrompt !== undefined) options.systemPrompt = systemPrompt;
-  if (allowedTools !== undefined) {
-    options.tools = allowedTools;
-    options.permissionMode = "bypassPermissions";
-    options.allowDangerouslySkipPermissions = true;
+  if (input.systemPrompt !== undefined) options.systemPrompt = input.systemPrompt;
+  if (input.allowedTools !== undefined) {
+    options.tools = input.allowedTools;
+    options.allowedTools = input.allowedTools;
   } else {
     options.tools = [];
   }
-  if (additionalDirectories !== undefined) {
-    options.additionalDirectories = additionalDirectories;
+  if (input.additionalDirectories !== undefined) {
+    options.additionalDirectories = input.additionalDirectories;
+  }
+  return options;
+}
+
+export async function callClaudeViaSdk(args: CallClaudeViaSdkArgs): Promise<string> {
+  const { userPrompt, systemPrompt, allowedTools, additionalDirectories, timeoutMs, model } = args;
+  // Resolved per call (success is cached inside the resolver): a module-load
+  // freeze is how a transient startup failure wedged every later request.
+  const CLAUDE_BIN = resolveClaudeBinary();
+
+  const controller = new AbortController();
+  const options: any = {
+    ...buildOneShotQueryOptions({ systemPrompt, allowedTools, additionalDirectories, model }),
+    // Lets the timeout branch actually cancel the underlying query.
+    abortController: controller,
+    // Surface the CLI's real complaint instead of an opaque exit code.
+    stderr: (data: string) => console.error("[sdkClient stderr]", data.slice(0, 500)),
+  };
+  if (CLAUDE_BIN !== undefined) {
+    options.pathToClaudeCodeExecutable = CLAUDE_BIN;
   }
 
   const iterator = query({ prompt: userPrompt, options });
