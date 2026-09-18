@@ -6,6 +6,7 @@ import { fuzzyMatchIngredient, type IngredientCandidate } from "../claude/ingred
 import { stashReceiptParse, peekReceiptParse, popReceiptParse, type ParsedReceiptPayload } from "./receiptParseSessions.js";
 import { moveSourceIntoReceipt } from "./receiptStorage.js";
 import { suggestExpirationDate } from "./pantryBatchService.js";
+import { convert, UnitConversionError, unitsPerContainerFor } from "../lib/units.js";
 
 const RESCUE_THRESHOLD = 0.30; // > 30% weak food items triggers a rescue pass
 
@@ -231,11 +232,32 @@ export async function commitReceipt(input: CommitInput) {
           })
         : null;
 
+      // Normalize the batch into the ingredient's default unit when the
+      // conversion hints allow — receipts speak store units (oz/lb) while
+      // recipes speak kitchen units, and storing lines raw made 62% of
+      // receipt batches mismatch their ingredient's unit. The ReceiptItem
+      // row above keeps the raw parsed unit as the historical record.
+      let batchQuantity = edit.quantity;
+      let batchUnit = edit.unit;
+      if (ingredient && ingredient.defaultUnit && edit.unit !== ingredient.defaultUnit) {
+        try {
+          batchQuantity = Math.round(convert(edit.quantity, edit.unit, ingredient.defaultUnit, {
+            densityGPerMl: ingredient.densityGPerMl,
+            gramsPerCount: ingredient.gramsPerCount,
+            unitsPerContainer: unitsPerContainerFor(ingredient),
+          }) * 1e4) / 1e4;
+          batchUnit = ingredient.defaultUnit;
+        } catch (e) {
+          if (!(e instanceof UnitConversionError)) throw e;
+          // Unconvertible — store honestly in the parsed unit.
+        }
+      }
+
       const newBatch = await tx.pantryBatch.create({
         data: {
           ingredientId,
-          quantity: edit.quantity,
-          unit: edit.unit,
+          quantity: batchQuantity,
+          unit: batchUnit,
           location: (edit.locationGuess ?? "pantry") as any,
           expirationDate,
           purchaseDate: new Date(input.tripDate),
