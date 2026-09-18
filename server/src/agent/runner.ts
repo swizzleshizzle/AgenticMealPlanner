@@ -31,6 +31,7 @@ import { dispatchToolCall } from "./registry.js";
 import { allTools } from "./tools/index.js";
 import type { PageContext, AgentResult, StreamEvent } from "./types.js";
 import { resolveClaudeBinary } from "../claude/binaryResolver.js";
+import { buildAgentQueryOptions, MCP_SERVER_NAME } from "./queryOptions.js";
 import { localYmd, thisWeekSunday } from "../lib/week.js";
 
 export { thisWeekSunday };
@@ -92,7 +93,7 @@ export async function* runAgentStream(args: RunAgentArgs): AsyncGenerator<Stream
     };
   });
 
-  const mcpServer = createSdkMcpServer({ name: "meal-planner-tools", tools: sdkTools });
+  const mcpServer = createSdkMcpServer({ name: MCP_SERVER_NAME, tools: sdkTools });
 
   // Build prompt: prepend conversation history as a transcript if present.
   const promptWithHistory = (args.history && args.history.length > 0)
@@ -106,24 +107,15 @@ export async function* runAgentStream(args: RunAgentArgs): AsyncGenerator<Stream
   const queryIterator = query({
     prompt: promptWithHistory,
     options: {
-      systemPrompt,
-      // Pin the model so quality/cost/JSON-compliance don't drift when the
-      // resolved Claude Code binary updates its default.
-      model: "claude-opus-4-8",
-      // Disable all built-in Claude tools; only our MCP tools are available.
-      tools: [],
+      ...buildAgentQueryOptions({
+        systemPrompt,
+        toolNames: allTools.map((t) => t.name),
+        claudeBin,
+        abortController: args.abortController,
+      }),
       mcpServers: {
-        "meal-planner-tools": mcpServer,
+        [MCP_SERVER_NAME]: mcpServer,
       },
-      // Disable session persistence for ephemeral API calls
-      persistSession: false,
-      // Cancel the query (and stop in-flight DB-mutating tool work) when the
-      // caller aborts — e.g. the SSE client navigates away.
-      ...(args.abortController ? { abortController: args.abortController } : {}),
-      ...(claudeBin ? { pathToClaudeCodeExecutable: claudeBin } : {}),
-      // Bypass permissions for MCP tool execution (safety vetted)
-      permissionMode: "bypassPermissions",
-      allowDangerouslySkipPermissions: true,
     },
   });
 
